@@ -118,10 +118,12 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .DS_Store
+
 .idea
 *work_dirs*
 tmp
 data/
 entropy_sorted/
 pretrain/
+work_dirs/
 
