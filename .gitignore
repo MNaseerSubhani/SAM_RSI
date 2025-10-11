@@ -125,5 +125,5 @@ tmp
 data/
 entropy_sorted/
 pretrain/
-work_dirs/
+work_dir/
 
