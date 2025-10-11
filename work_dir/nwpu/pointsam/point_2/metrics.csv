@@ -1,0 +1,2 @@
+Prompt,IoU,Recall,Precision,F1,epoch
+point,0.6392,0.8042,0.7694,0.7492,0
