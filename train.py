@@ -240,7 +240,7 @@ def train_sam(
             total_losses.update(loss_total.item(), 1)
  
 
-            if (iter+1) %match_interval==0:
+            if (rank+1) %match_interval==0:
                 fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
                              f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
                              f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
