@@ -16,6 +16,54 @@ def uniform_sampling(masks, N=1):
     return n_points
 
 
+# import numpy as np
+
+# def uniform_sampling(masks, N=1, pad_ratio=0.05):
+#     """
+#     Uniformly sample N points per mask while keeping a padding margin
+#     from image borders (simulating human-like labeling).
+
+#     Args:
+#         masks: list of (H, W) binary masks (numpy arrays or torch tensors)
+#         N: number of points to sample per mask
+#         pad_ratio: percentage of H and W to exclude from edges
+#     Returns:
+#         n_points: list of [[x, y], ...] points for each mask
+#     """
+#     n_points = []
+
+#     for mask in masks:
+#         if not isinstance(mask, np.ndarray):
+#             mask = mask.cpu().numpy()
+
+#         h, w = mask.shape
+#         pad_y, pad_x = int(h * pad_ratio), int(w * pad_ratio)
+
+#         # get mask coordinates
+#         indices = np.argwhere(mask == 1)  # [y, x]
+#         if len(indices) == 0:
+#             n_points.append([])  # empty mask
+#             continue
+
+#         # filter out edge-close points
+#         inside = (
+#             (indices[:, 0] >= pad_y) & (indices[:, 0] < h - pad_y) &
+#             (indices[:, 1] >= pad_x) & (indices[:, 1] < w - pad_x)
+#         )
+#         indices = indices[inside]
+
+#         # fallback if too few points after padding
+#         if len(indices) == 0:
+#             indices = np.argwhere(mask == 1)
+
+#         sampled_indices = np.random.choice(len(indices), min(N, len(indices)), replace=True)
+#         sampled_points = np.flip(indices[sampled_indices], axis=1)  # to [x, y]
+#         n_points.append(sampled_points.tolist())
+
+#     return n_points
+
+
+
 def get_multi_distance_points(input_point, mask, points_nubmer):
     new_points = np.zeros((points_nubmer + 1, 2))
     new_points[0] = [input_point[1], input_point[0]]

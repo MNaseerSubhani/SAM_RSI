@@ -20,13 +20,119 @@ from lightning.fabric.fabric import _FabricOptimizer
 from box import Box
 from datasets import call_load_dataset
 from utils.model import Model
-# from utils.losses import DiceLoss, FocalLoss, Matching_Loss
+from utils.losses import DiceLoss, FocalLoss, Matching_Loss
 from utils.eval_utils import AverageMeter, validate, get_prompts, calc_iou
 from utils.tools import copy_model, create_csv, reduce_instances
 from utils.utils import *
 # from utils.finch import FINCH
 
 # vis = False
+
+
+def sort_entropy_(model, target_pts):
+
+    # save_dir = "entropy_sorted"
+    # os.makedirs(save_dir, exist_ok=True)
+
+    collected = []
+    with torch.no_grad():
+        for i, batch in enumerate(tqdm(target_pts, desc='Computing per-sample entropy', ncols=100)):
+            imgs, boxes, masks, img_paths = batch
+            prompts = get_prompts(cfg, boxes, masks)
+            embeds, masks_pred, _, _ = model(imgs, prompts)
+
+            batch_size = imgs.shape[0]
+            for b in range(batch_size):
+                img_np = (imgs[b].permute(1,2,0).cpu().numpy() * 255).astype(np.uint8)
+                p_b = masks_pred[b].clamp(1e-6, 1 - 1e-6)
+                if p_b.ndim == 2:
+                    p_b = p_b.unsqueeze(0)
+                gt_b = masks[b]
+                if gt_b.ndim == 2:
+                    gt_b = gt_b.unsqueeze(0)
+
+                entropy_scalar = 0
+                num_inst = p_b.shape[0]
+                for j in range(num_inst):
+                    p_inst = p_b[j]
+                    entropy_map_inst = - (p_inst * torch.log(p_inst) + (1 - p_inst) * torch.log(1 - p_inst))
+                    entropy_scalar += float(entropy_map_inst.mean().cpu().item())
+
+                entropy_scalar /= num_inst
+                render = {
+                    'real': img_np,
+                    'prompt': prompts
+                }
+                img_path = img_paths[b] if isinstance(img_paths, (list, tuple)) else img_paths
+                collected.append((entropy_scalar, img_path, render))
+
+            # if i>10:
+            #     break
+
+    collected.sort(key=lambda x: x[0], reverse=True)
+
+    return collected
+
+def process_forward(img_tensor, prompt, model):
+    with torch.no_grad():
+        _, masks_pred, iou_predictions, _ = model(img_tensor, prompt)
+    entropy_maps = []
+    pred_ins = []
+    for i, mask_p in enumerate( masks_pred[0]):
+
+        p = mask_p.clamp(1e-6, 1 - 1e-6)
+        if p.ndim == 2:
+            p = p.unsqueeze(0)
+
+        entropy_map = entropy_map_calculate(p)
+        entropy_maps.append(entropy_map)
+        pred_ins.append(p)
+
+    return entropy_maps, pred_ins, iou_predictions
+        
+def entropy_map_calculate(p):
+    entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
+    entropy_map = entropy_map.max(dim=0)[0]
+
+    return entropy_map
+
+def prompt_calibration(cfg, entrop_map, prompts, point_status):
+    point_list = []
+    point_labels_list = []
+    num_points = cfg.num_points
+
+    for m in range(len(entrop_map)):
+        point_coords = prompts[0][0][m][:].unsqueeze(0)
+        point_coords_lab = prompts[0][1][m][:].unsqueeze(0)
+
+        # Find high-entropy location
+        max_idx = torch.argmax(entrop_map[m])
+        y = max_idx // entrop_map[m].shape[1]
+        x = max_idx % entrop_map[m].shape[1]
+        neg_point_coords = torch.tensor([[x.item(), y.item()]], device=point_coords.device).unsqueeze(0)
+
+
+        # Combine positive and negative points
+        point_coords_all = torch.cat((point_coords, neg_point_coords), dim=1)
+        
+        # Append a new label (1) to the label tensor
+        point_labels_all = torch.cat(
+            (point_coords_lab, torch.tensor([[point_status]], device=point_coords.device, dtype=point_coords_lab.dtype)),
+            dim=1
+        )
+        
+        point_list.append(point_coords_all)
+        point_labels_list.append(point_labels_all)
+
+
+
+
+
+    point_ = torch.cat(point_list).squeeze(1)
+    point_labels_ = torch.cat(point_labels_list)
+    new_prompts = [(point_, point_labels_)]
+    return new_prompts
+
 
 def train_sam(
     cfg: Box,
@@ -38,96 +144,141 @@ def train_sam(
     val_dataloader: DataLoader,
     target_pts,
 ):
-    model.eval()
 
-    save_dir = "entropy_sorted"
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    collected = sort_entropy_(model, target_pts)
+    
+    focal_loss = FocalLoss()
+    dice_loss = DiceLoss()
+    max_iou = 0.
 
-    # Collect rendered outputs per sample for global sorting
-    collected = []  # list of (entropy_scalar, img_path, render_dict)
-    with torch.no_grad():
-        for i, batch in enumerate(tqdm(target_pts, desc='Computing per-sample entropy', ncols=100)):
-            imgs, boxes, masks, img_paths = batch
-            prompts = get_prompts(cfg, boxes, masks)
+    for epoch in range(1, cfg.num_epochs + 1):
+        batch_time = AverageMeter()
+        data_time = AverageMeter()
+        focal_losses = AverageMeter()
+        dice_losses = AverageMeter()
+        iou_losses = AverageMeter()
+        total_losses = AverageMeter()
 
-            embeds, masks_pred, _, _ = model(imgs, prompts)
-            del _
+        end = time.time()
+        
+        for rank, (entropy_scalar, img_path, render) in enumerate(reversed(collected), start=1):
+            img_tensor = torch.from_numpy(render['real']).permute(2,0,1).float() / 255.0
+            img_tensor = img_tensor.unsqueeze(0).to(fabric.device)
 
-            batch_size = imgs.shape[0]
-            for b in range(batch_size):
-                # Convert image tensor (C,H,W) → (H,W,C)
-                img_np = (imgs[b].permute(1,2,0).cpu().numpy() * 255).astype(np.uint8)
+            prompt_main = render['prompt']
+            entropy_maps, pred_masks, iou_predictions = process_forward(img_tensor, prompt_main, model)
 
-                # masks_pred[b]: [N, H, W] with values in [0,1]
-                p_b = masks_pred[b].clamp(1e-6, 1 - 1e-6)
-                entropy_map_b = - (p_b * torch.log(p_b) + (1 - p_b) * torch.log(1 - p_b))
-                # Aggregate across instances to a single map per image
-                if entropy_map_b.ndim == 3:
-                    entropy_map_b = entropy_map_b.max(dim=0)[0]
-                # Scalar entropy for the sample
-                entropy_scalar = float(entropy_map_b.mean().cpu().item())
+            prompt_1 = prompt_calibration(cfg, entropy_maps, prompt_main, 1)
+            entropy_maps_1, preds_1, _ = process_forward(img_tensor, prompt_1, model)
+            entr_means_pos = [ent.mean() for ent in entropy_maps_1]
 
-                # Render GT mask
-                gt_mask = masks[b].cpu().numpy()   # [N, H, W] or [H, W]
-                if gt_mask.ndim == 3:
-                    gt_mask = np.max(gt_mask, axis=0)
-                gt_img = (gt_mask.astype(np.uint8) * 255)
+            # Compute relative entropy = mean entropy / (number of 1s in prediction)
+            rel_entr_pos = []
+            for ent, pred in zip(entropy_maps_1, preds_1):
+                num_ones = (pred >0.0 ).sum()
+                rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
+                rel_entr_pos.append(rel_entr)
 
-                # Render Prediction mask
-                pred_mask = masks_pred[b].detach().cpu().numpy()
-                if pred_mask.ndim == 3:
-                    pred_mask = np.max(pred_mask, axis=0)
-                pred_img = ((pred_mask > 0.5).astype(np.uint8) * 255)
+            prompt_2 = prompt_calibration(cfg, entropy_maps, prompt_main, 0)
+            entropy_maps_2, preds_2,_ = process_forward(img_tensor, prompt_2, model)
+            entr_means_neg = [ent.mean() for ent in entropy_maps_2]
 
-                # Render entropy heatmap
-                entropy_np = entropy_map_b.cpu().numpy()
-                entropy_norm = (entropy_np - entropy_np.min()) / (entropy_np.max() - entropy_np.min() + 1e-6)
-                cmap = cm.get_cmap("viridis")
-                entropy_color = (cmap(entropy_norm)[:, :, :3] * 255).astype(np.uint8)
+            rel_entr_neg = []
+            for ent, pred in zip(entropy_maps_2, preds_2):
+                num_ones = (pred > 0.0).sum()
+                rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
+                rel_entr_neg.append(rel_entr)
 
-                render = {
-                    'real': img_np,
-                    'gt': gt_img,
-                    'pred': pred_img,
-                    'entropy': entropy_color,
-                }
+            soft_mask_final = []
+            for i in range(len(preds_1)):
+                if rel_entr_pos[i] < rel_entr_neg[i]:
+                    soft_mask_final.append(preds_1[i])
+                else:
+                    soft_mask_final.append(preds_2[i])
+            
+            num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
+            loss_focal = torch.tensor(0., device=fabric.device)
+            loss_dice = torch.tensor(0., device=fabric.device)
+            loss_match = torch.tensor(0., device=fabric.device)
+            loss_iou = torch.tensor(0., device=fabric.device)
 
-                img_path = img_paths[b] if isinstance(img_paths, (list, tuple)) else img_paths
-                collected.append((entropy_scalar, img_path, render))
+           
 
-    # Sort ascending by entropy
-    collected.sort(key=lambda x: x[0])
+            _, pred_masks, iou_predictions, _ = model(img_tensor, prompt_main)
 
-    # Write sorted list for reference
-    list_path = os.path.join(save_dir, "sorted_list.txt")
-    with open(list_path, 'w') as f:
-        for rank, (entropy_scalar, img_path, _) in enumerate(collected, start=1):
-            f.write(f"{rank:05d}\t{entropy_scalar:.6f}\t{img_path}\n")
+            
+            for i, ( pred_mask, soft_mask, prompt, iou_prediction) in enumerate(zip( pred_masks[0], soft_mask_final, prompt_main, iou_predictions)):
+                # soft_mask = (soft_mask > 0.).float()
+      
 
-    # Save images in ranked order with original base names prefixed by rank
-    for rank, (entropy_scalar, img_path, render) in enumerate(collected, start=1):
-        base = os.path.splitext(os.path.basename(img_path))[0]
-        Image.fromarray(render['real']).save(os.path.join(save_dir, f"{rank:05d}_{base}.jpg"))
-        Image.fromarray(render['gt']).save(os.path.join(save_dir, f"{rank:05d}_{base}_gt.jpg"))
-        Image.fromarray(render['pred']).save(os.path.join(save_dir, f"{rank:05d}_{base}_pred.jpg"))
-        Image.fromarray(render['entropy']).save(os.path.join(save_dir, f"{rank:05d}_{base}_en.jpg"))
+              
 
-    # focal_loss = FocalLoss()
-    # dice_loss = DiceLoss()
+                loss_focal += focal_loss(pred_mask, soft_mask, num_masks)
+                loss_dice += dice_loss(pred_mask, soft_mask, num_masks)
+                pred_mask = pred_mask.unsqueeze(0)
+                batch_iou = calc_iou(pred_mask, soft_mask)
+                # iou_prediction = iou_prediction.unsqueeze(1)
+                loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
+
+            del  pred_masks, iou_predictions
+
+            loss_total = 20. * loss_focal + loss_dice #+ loss_iou 
+
+            fabric.backward(loss_total)
+
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+            torch.cuda.empty_cache()
+
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            focal_losses.update(loss_focal.item(), batch_size)
+            dice_losses.update(loss_dice.item(), batch_size)
+            iou_losses.update(loss_iou.item(), batch_size)
+            total_losses.update(loss_total.item(), batch_size)
+ 
+
+            if (iter+1) %match_interval==0:
+                fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
+                             f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
+                             f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
+                             f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
+                             f' | Dice Loss [{dice_losses.val:.4f} ({dice_losses.avg:.4f})]'
+                             f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
+                             f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
+
+            # loss_logger = {
+            #     "Focal Loss": focal_losses.avg,
+            #     "Dice Loss": dice_losses.avg,
+            #     "IoU Loss": iou_losses.avg,
+            #     "Total Loss": total_losses.avg
+            # }
+            # fabric.log_dict(loss_logger, num_iter * (epoch - 1) + iter)
+
+            if (rank+1)%40 == 0:
+                iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+            torch.cuda.empty_cache()
+            
+        if epoch % cfg.eval_interval == 0:
+            iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+            if iou > max_iou:
+                state = {"model": model, "optimizer": optimizer}
+                fabric.save(os.path.join(cfg.out_dir, "save", "best-ckpt.pth"), state)
+                max_iou = iou
+            del iou
+
+            
+
+
+   
     # max_iou = 0.
     # mem_bank = Store(1, cfg.mem_bank_max_len) 
     # match_interval = cfg.match_interval
-    # for epoch in range(1, cfg.num_epochs + 1):
-    #     batch_time = AverageMeter()
-    #     data_time = AverageMeter()
-    #     focal_losses = AverageMeter()
-    #     dice_losses = AverageMeter()
-    #     iou_losses = AverageMeter()
-    #     total_losses = AverageMeter()
-    #     match_losses = AverageMeter()
-    #     end = time.time()
-    #     num_iter = len(train_dataloader)
+
+
+   
 
     #     for iter, data in enumerate(train_dataloader):
 
