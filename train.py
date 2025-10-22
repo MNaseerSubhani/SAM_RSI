@@ -241,7 +241,7 @@ def train_sam(
  
 
             if (rank+1) %5==0:
-                fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
+                fabric.print(f'Epoch: [{epoch}][{rank + 1}/{len(train_dataloader)}]'
                              f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
                              f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
                              f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
