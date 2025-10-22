@@ -161,7 +161,7 @@ def train_sam(
 
         end = time.time()
         
-        for rank, (entropy_scalar, img_path, render) in enumerate(reversed(collected), start=1):
+        for rank, (entropy_scalar, img_path, render) in enumerate(collected, start=1):
             img_tensor = torch.from_numpy(render['real']).permute(2,0,1).float() / 255.0
             img_tensor = img_tensor.unsqueeze(0).to(fabric.device)
 
@@ -217,7 +217,7 @@ def train_sam(
                 loss_dice += dice_loss(pred_mask, soft_mask, num_masks)
                 pred_mask = pred_mask.unsqueeze(0)
                 batch_iou = calc_iou(pred_mask, soft_mask)
-                # iou_prediction = iou_prediction.unsqueeze(1)
+                iou_prediction = iou_prediction.unsqueeze(1)
                 loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
 
             del  pred_masks, iou_predictions
