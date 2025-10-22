@@ -234,10 +234,10 @@ def train_sam(
             batch_time.update(time.time() - end)
             end = time.time()
 
-            focal_losses.update(loss_focal.item(), batch_size)
-            dice_losses.update(loss_dice.item(), batch_size)
-            iou_losses.update(loss_iou.item(), batch_size)
-            total_losses.update(loss_total.item(), batch_size)
+            focal_losses.update(loss_focal.item(), 1)
+            dice_losses.update(loss_dice.item(), 1)
+            iou_losses.update(loss_iou.item(), 1)
+            total_losses.update(loss_total.item(), 1)
  
 
             if (iter+1) %match_interval==0:
@@ -261,13 +261,13 @@ def train_sam(
                 iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
             torch.cuda.empty_cache()
             
-        if epoch % cfg.eval_interval == 0:
-            iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-            if iou > max_iou:
-                state = {"model": model, "optimizer": optimizer}
-                fabric.save(os.path.join(cfg.out_dir, "save", "best-ckpt.pth"), state)
-                max_iou = iou
-            del iou
+        # if epoch % cfg.eval_interval == 0:
+        #     iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+        #     if iou > max_iou:
+        #         state = {"model": model, "optimizer": optimizer}
+        #         fabric.save(os.path.join(cfg.out_dir, "save", "best-ckpt.pth"), state)
+        #         max_iou = iou
+        #     del iou
 
             
 
