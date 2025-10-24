@@ -177,7 +177,7 @@ def train_sam(
             entropy_maps, pred_masks, iou_predictions = process_forward(images_weak, prompts, model)
 
             prompt_1 = prompt_calibration(cfg, entropy_maps, prompts, 1)
-            entropy_maps_1, preds_1, _ = process_forward(img_tensor, prompt_1, model)
+            entropy_maps_1, preds_1, _ = process_forward(images_weak, prompt_1, model)
             entr_means_pos = [ent.mean() for ent in entropy_maps_1]
 
             # Compute relative entropy = mean entropy / (number of 1s in prediction)
@@ -188,7 +188,7 @@ def train_sam(
                 rel_entr_pos.append(rel_entr)
 
             prompt_2 = prompt_calibration(cfg, entropy_maps, prompts, 0)
-            entropy_maps_2, preds_2,_ = process_forward(img_tensor, prompt_2, model)
+            entropy_maps_2, preds_2,_ = process_forward(images_weak, prompt_2, model)
             entr_means_neg = [ent.mean() for ent in entropy_maps_2]
 
             rel_entr_neg = []
