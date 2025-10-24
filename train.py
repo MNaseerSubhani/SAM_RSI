@@ -173,8 +173,14 @@ def train_sam(
             #     bboxes, gt_masks = reduce_instances(bboxes, gt_masks, cfg.max_nums)
             prompts = get_prompts(cfg, bboxes, gt_masks)
 
+            #1. caculate pairwise IoUs of masks
+            mask_ious, init_masks = cal_mask_ious(cfg, model, images_weak, prompts, gt_masks)
+       
+            #2. get new prompts through neg_prompt_calibration
+            new_prompts = neg_prompt_calibration(cfg, mask_ious, prompts)
+
             with torch.no_grad():
-                soft_image_embeds, soft_masks, _, _ = model(images_weak, prompts)
+                soft_image_embeds, soft_masks, _, _ = model(images_weak, new_prompts)
            
 
             if isinstance(soft_image_embeds, dict):
@@ -227,16 +233,18 @@ def train_sam(
                              f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
                              f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
 
-
+            if (iter+1)%100 == 0:
+                iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+                del iou
             torch.cuda.empty_cache()
             
-        if epoch % cfg.eval_interval == 0:
-            iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-            # if iou > max_iou:
-            #     state = {"model": model, "optimizer": optimizer}
-            #     fabric.save(os.path.join(cfg.out_dir, "save", "best-ckpt.pth"), state)
-            #     max_iou = iou
-            del iou   
+        # if epoch % cfg.eval_interval == 0:
+        #     iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+        #     # if iou > max_iou:
+        #     #     state = {"model": model, "optimizer": optimizer}
+        #     #     fabric.save(os.path.join(cfg.out_dir, "save", "best-ckpt.pth"), state)
+        #     #     max_iou = iou
+        #     del iou   
 
 
 
