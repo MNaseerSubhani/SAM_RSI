@@ -15,6 +15,7 @@ config = {
 
     "start_lora_layer": 6,
     "lora_rank": 4,
+    "match_interval": 30,
 
     "prompt": "point",
     "out_dir": "",
