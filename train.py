@@ -230,6 +230,8 @@ def train_sam(
 
             for i, ( pred_mask, soft_mask,  gt_mask, prompt, iou_prediction) in enumerate(zip( pred_masks, soft_masks, gt_masks, prompts, iou_predictions)):
                 soft_mask = (soft_mask > 0.).float()
+
+                print(pred_mask.shape, soft_mask.shape, gt_mask.shape, prompt.shape, iou_prediction.shape)
                 
                 loss_focal += focal_loss(pred_mask, soft_mask, num_masks)
                 loss_dice += dice_loss(pred_mask, soft_mask, num_masks)
