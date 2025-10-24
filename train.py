@@ -254,7 +254,7 @@ def train_sam(
                 entropy_map = entropy_map_calculate(p)
                 entropy_masks.append(entropy_map)
 
-            entropy_masks = create_entropy_mask(entropy_masks, threshold=0.5, device=fabric.device)
+            entropy_masks_binary = create_entropy_mask(entropy_maps, threshold=0.5, device=fabric.device)
 
             del _
 
