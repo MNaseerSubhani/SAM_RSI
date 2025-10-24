@@ -173,8 +173,9 @@ def train_sam(
             #     bboxes, gt_masks = reduce_instances(bboxes, gt_masks, cfg.max_nums)
             prompts = get_prompts(cfg, bboxes, gt_masks)
 
-
-            soft_image_embeds, soft_masks, _, _ = model(images_weak, prompts)
+            with torch.no_grad():
+                soft_image_embeds, soft_masks, _, _ = model(images_weak, prompts)
+           
 
             if isinstance(soft_image_embeds, dict):
                 soft_image_embeds = soft_image_embeds['vision_features']  
@@ -206,6 +207,7 @@ def train_sam(
             scheduler.step()
             optimizer.zero_grad()
             torch.cuda.empty_cache()
+            del images_weak, images_strong, prompts, pred_masks, soft_masks, iou_predictions, gt_masks
 
             batch_time.update(time.time() - end)
             end = time.time()
