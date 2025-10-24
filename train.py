@@ -268,7 +268,7 @@ def train_sam(
                 ):
                     soft_mask = (soft_mask > 0.).float()
 
-                    print( soft_mask.shape, entropy_mask.shape)
+                    print( soft_mask.shape, entropy_mask.shape, pred_mask.shape)
                     
                     # Apply entropy mask to losses
                     loss_focal += focal_loss(pred_mask, soft_mask, entropy_mask=entropy_mask)
