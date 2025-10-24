@@ -72,7 +72,26 @@ def sort_entropy_(model, target_pts):
     collected.sort(key=lambda x: x[0], reverse=True)
 
     return collected
-
+def create_entropy_mask(entropy_maps, threshold=0.5, device='cuda'):
+    """
+    Create a mask to reduce learning from high entropy regions.
+    
+    Args:
+        entropy_maps: List of entropy maps for each instance
+        threshold: Entropy threshold above which to mask out regions
+        device: Device to place the mask on
+    
+    Returns:
+        List of entropy masks (0 for high entropy, 1 for low entropy)
+    """
+    entropy_masks = []
+    
+    for entropy_map in entropy_maps:
+        # Create binary mask: 1 for low entropy, 0 for high entropy
+        entropy_mask = (entropy_map < threshold).float()
+        entropy_masks.append(entropy_mask)
+    
+    return entropy_masks
 def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
         _, masks_pred, iou_predictions, _ = model(img_tensor, prompt)
@@ -226,6 +245,17 @@ def train_sam(
             # torch.cuda.empty_cache()
             _, pred_masks, iou_predictions, _= model(img_tensor, prompts)   # student
 
+            entropy_masks = []
+            for i, pred_mask in enumerate(pred_masks):
+                # Calculate entropy for this prediction
+                p = pred_mask.clamp(1e-6, 1 - 1e-6)
+                if p.ndim == 2:
+                    p = p.unsqueeze(0)
+                entropy_map = entropy_map_calculate(p)
+                entropy_masks.append(entropy_map)
+
+            entropy_masks = create_entropy_mask(entropy_masks, threshold=0.5, device=fabric.device)
+
             del _
 
             num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
@@ -233,19 +263,20 @@ def train_sam(
             loss_dice = torch.tensor(0., device=fabric.device)
             loss_iou = torch.tensor(0., device=fabric.device)
 
-            for i, ( pred_mask, soft_mask, prompt, iou_prediction) in enumerate(zip( pred_masks, soft_masks, prompts, iou_predictions)):
-                soft_mask = (soft_mask > 0.).float()
-
-                # print(pred_mask.shape, soft_mask.shape)
-                
-                loss_focal += focal_loss(pred_mask, soft_mask, num_masks)
-                loss_dice += dice_loss(pred_mask, soft_mask, num_masks)
-                batch_iou = calc_iou(pred_mask, soft_mask)
-                loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
+            for i, (pred_mask, soft_mask, prompt, iou_prediction, entropy_mask) in enumerate(
+                    zip(pred_masks, soft_masks, prompts, iou_predictions, entropy_masks_binary)
+                ):
+                    soft_mask = (soft_mask > 0.).float()
+                    
+                    # Apply entropy mask to losses
+                    loss_focal += focal_loss(pred_mask, soft_mask, entropy_mask=entropy_mask, num_masks=num_masks)
+                    loss_dice += dice_loss(pred_mask, soft_mask, entropy_mask=entropy_mask, num_masks=num_masks)
+                    batch_iou = calc_iou(pred_mask, soft_mask)
+                    loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
 
             del  pred_masks, iou_predictions 
 
-            loss_total = 20. * loss_focal + loss_dice + loss_iou 
+            loss_total = 20. * loss_focal + loss_dice #+ loss_iou 
 
             fabric.backward(loss_total)
 

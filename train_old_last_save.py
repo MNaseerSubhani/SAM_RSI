@@ -77,7 +77,7 @@ def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
         _, masks_pred, iou_predictions, _ = model(img_tensor, prompt)
     entropy_maps = []
-    pred_ins = []
+
     for i, mask_p in enumerate( masks_pred[0]):
 
         p = mask_p.clamp(1e-6, 1 - 1e-6)
@@ -86,9 +86,9 @@ def process_forward(img_tensor, prompt, model):
 
         entropy_map = entropy_map_calculate(p)
         entropy_maps.append(entropy_map)
-        pred_ins.append(p)
+        
 
-    return entropy_maps, pred_ins, iou_predictions
+    return entropy_maps, masks_pred, iou_predictions
         
 def entropy_map_calculate(p):
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
@@ -144,12 +144,11 @@ def train_sam(
     val_dataloader: DataLoader,
     target_pts,
 ):
-
     collected = sort_entropy_(model, target_pts)
-    
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
     max_iou = 0.
+    match_interval = cfg.match_interval
 
     for epoch in range(1, cfg.num_epochs + 1):
         batch_time = AverageMeter()
@@ -158,17 +157,31 @@ def train_sam(
         dice_losses = AverageMeter()
         iou_losses = AverageMeter()
         total_losses = AverageMeter()
-
+        match_losses = AverageMeter()
         end = time.time()
-        
-        for rank, (entropy_scalar, img_path, render) in enumerate(collected, start=1):
+        num_iter = len(train_dataloader)
+
+        # for iter, data in enumerate(train_dataloader):
+
+        #     data_time.update(time.time() - end)
+        #     images_weak, images_strong, bboxes, gt_masks, img_paths= data
+        #     del data
+        for iter, (entropy_scalar, img_path, render) in enumerate(reversed(collected), start=1):
             img_tensor = torch.from_numpy(render['real']).permute(2,0,1).float() / 255.0
             img_tensor = img_tensor.unsqueeze(0).to(fabric.device)
 
-            prompt_main = render['prompt']
-            entropy_maps, pred_masks, iou_predictions = process_forward(img_tensor, prompt_main, model)
+            prompts = render['prompt']
 
-            prompt_1 = prompt_calibration(cfg, entropy_maps, prompt_main, 1)
+            batch_size = img_tensor.size(0)
+            # num_insts = sum(len(gt_mask) for gt_mask in gt_masks)
+            # if num_insts > cfg.max_nums:
+            #     bboxes, gt_masks = reduce_instances(bboxes, gt_masks, cfg.max_nums)
+            # prompts = get_prompts(cfg, bboxes, gt_masks)
+
+            ###################
+            entropy_maps, pred_masks, iou_predictions = process_forward(img_tensor, prompts, model)
+
+            prompt_1 = prompt_calibration(cfg, entropy_maps, prompts, 1)
             entropy_maps_1, preds_1, _ = process_forward(img_tensor, prompt_1, model)
             entr_means_pos = [ent.mean() for ent in entropy_maps_1]
 
@@ -179,7 +192,7 @@ def train_sam(
                 rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
                 rel_entr_pos.append(rel_entr)
 
-            prompt_2 = prompt_calibration(cfg, entropy_maps, prompt_main, 0)
+            prompt_2 = prompt_calibration(cfg, entropy_maps, prompts, 0)
             entropy_maps_2, preds_2,_ = process_forward(img_tensor, prompt_2, model)
             entr_means_neg = [ent.mean() for ent in entropy_maps_2]
 
@@ -189,40 +202,50 @@ def train_sam(
                 rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
                 rel_entr_neg.append(rel_entr)
 
-            soft_mask_final = []
+            soft_masks = []
             for i in range(len(preds_1)):
                 if rel_entr_pos[i] < rel_entr_neg[i]:
-                    soft_mask_final.append(preds_1[i])
+                    soft_masks.append(preds_1[i])
                 else:
-                    soft_mask_final.append(preds_2[i])
-            
+                    soft_masks.append(preds_2[i])
+
+            ################### 
+
+            #1. caculate pairwise IoUs of masks
+            # mask_ious, init_masks = cal_mask_ious(cfg, model, images_weak, prompts, gt_masks)
+       
+            #2. get new prompts through neg_prompt_calibration
+            # new_prompts = neg_prompt_calibration(cfg, mask_ious, prompts)
+
+            # with torch.no_grad():
+            #     soft_image_embeds, soft_masks, _, _ = model(images_weak, new_prompts)
+           
+
+            # if isinstance(soft_image_embeds, dict):
+            #     soft_image_embeds = soft_image_embeds['vision_features']  
+            # torch.cuda.empty_cache()
+            _, pred_masks, iou_predictions, _= model(img_tensor, prompts)   # student
+
+            del _
+
             num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
             loss_focal = torch.tensor(0., device=fabric.device)
             loss_dice = torch.tensor(0., device=fabric.device)
-            loss_match = torch.tensor(0., device=fabric.device)
             loss_iou = torch.tensor(0., device=fabric.device)
 
-           
+            for i, ( pred_mask, soft_mask, prompt, iou_prediction) in enumerate(zip( pred_masks, soft_masks, prompts, iou_predictions)):
+                soft_mask = (soft_mask > 0.).float()
 
-            _, pred_masks, iou_predictions, _ = model(img_tensor, prompt_main)
-
-            
-            for i, ( pred_mask, soft_mask, prompt, iou_prediction) in enumerate(zip( pred_masks[0], soft_mask_final, prompt_main, iou_predictions)):
-                # soft_mask = (soft_mask > 0.).float()
-      
-
-              
-
+                # print(pred_mask.shape, soft_mask.shape)
+                
                 loss_focal += focal_loss(pred_mask, soft_mask, num_masks)
                 loss_dice += dice_loss(pred_mask, soft_mask, num_masks)
-                pred_mask = pred_mask.unsqueeze(0)
                 batch_iou = calc_iou(pred_mask, soft_mask)
-                iou_prediction = iou_prediction.unsqueeze(1)
                 loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
 
-            del  pred_masks, iou_predictions
+            del  pred_masks, iou_predictions 
 
-            loss_total = 20. * loss_focal + loss_dice #+ loss_iou 
+            loss_total = 20. * loss_focal + loss_dice + loss_iou 
 
             fabric.backward(loss_total)
 
@@ -230,18 +253,19 @@ def train_sam(
             scheduler.step()
             optimizer.zero_grad()
             torch.cuda.empty_cache()
+            del  prompts, soft_masks
 
             batch_time.update(time.time() - end)
             end = time.time()
 
-            focal_losses.update(loss_focal.item(), 1)
-            dice_losses.update(loss_dice.item(), 1)
-            iou_losses.update(loss_iou.item(), 1)
-            total_losses.update(loss_total.item(), 1)
- 
+            focal_losses.update(loss_focal.item(), batch_size)
+            dice_losses.update(loss_dice.item(), batch_size)
+            iou_losses.update(loss_iou.item(), batch_size)
+            total_losses.update(loss_total.item(), batch_size)
+          
 
-            if (rank+1) %5==0:
-                fabric.print(f'Epoch: [{epoch}][{rank + 1}/{len(train_dataloader)}]'
+            if (iter+1) %match_interval==0:
+                fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
                              f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
                              f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
                              f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
@@ -249,17 +273,139 @@ def train_sam(
                              f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
                              f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
 
-            # loss_logger = {
-            #     "Focal Loss": focal_losses.avg,
-            #     "Dice Loss": dice_losses.avg,
-            #     "IoU Loss": iou_losses.avg,
-            #     "Total Loss": total_losses.avg
-            # }
-            # fabric.log_dict(loss_logger, num_iter * (epoch - 1) + iter)
-
-            if (rank+1)%40 == 0:
+            if (iter+1)%100 == 0:
                 iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+                del iou
             torch.cuda.empty_cache()
+            
+        # if epoch % cfg.eval_interval == 0:
+        #     iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+        #     # if iou > max_iou:
+        #     #     state = {"model": model, "optimizer": optimizer}
+        #     #     fabric.save(os.path.join(cfg.out_dir, "save", "best-ckpt.pth"), state)
+        #     #     max_iou = iou
+        #     del iou   
+
+
+
+
+
+
+
+
+    # focal_loss = FocalLoss()
+    # dice_loss = DiceLoss()
+    # max_iou = 0.
+
+    # for epoch in range(1, cfg.num_epochs + 1):
+    #     batch_time = AverageMeter()
+    #     data_time = AverageMeter()
+    #     focal_losses = AverageMeter()
+    #     dice_losses = AverageMeter()
+    #     iou_losses = AverageMeter()
+    #     total_losses = AverageMeter()
+
+    #     end = time.time()
+        
+    #     for rank, (entropy_scalar, img_path, render) in enumerate(collected, start=1):
+    #         img_tensor = torch.from_numpy(render['real']).permute(2,0,1).float() / 255.0
+    #         img_tensor = img_tensor.unsqueeze(0).to(fabric.device)
+
+    #         prompt_main = render['prompt']
+    #         entropy_maps, pred_masks, iou_predictions = process_forward(img_tensor, prompt_main, model)
+
+    #         prompt_1 = prompt_calibration(cfg, entropy_maps, prompt_main, 1)
+    #         entropy_maps_1, preds_1, _ = process_forward(img_tensor, prompt_1, model)
+    #         entr_means_pos = [ent.mean() for ent in entropy_maps_1]
+
+    #         # Compute relative entropy = mean entropy / (number of 1s in prediction)
+    #         rel_entr_pos = []
+    #         for ent, pred in zip(entropy_maps_1, preds_1):
+    #             num_ones = (pred >0.0 ).sum()
+    #             rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
+    #             rel_entr_pos.append(rel_entr)
+
+    #         prompt_2 = prompt_calibration(cfg, entropy_maps, prompt_main, 0)
+    #         entropy_maps_2, preds_2,_ = process_forward(img_tensor, prompt_2, model)
+    #         entr_means_neg = [ent.mean() for ent in entropy_maps_2]
+
+    #         rel_entr_neg = []
+    #         for ent, pred in zip(entropy_maps_2, preds_2):
+    #             num_ones = (pred > 0.0).sum()
+    #             rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
+    #             rel_entr_neg.append(rel_entr)
+
+    #         soft_mask_final = []
+    #         for i in range(len(preds_1)):
+    #             if rel_entr_pos[i] < rel_entr_neg[i]:
+    #                 soft_mask_final.append(preds_1[i])
+    #             else:
+    #                 soft_mask_final.append(preds_2[i])
+            
+    #         num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
+    #         loss_focal = torch.tensor(0., device=fabric.device)
+    #         loss_dice = torch.tensor(0., device=fabric.device)
+    #         loss_match = torch.tensor(0., device=fabric.device)
+    #         loss_iou = torch.tensor(0., device=fabric.device)
+
+           
+
+    #         _, pred_masks, iou_predictions, _ = model(img_tensor, prompt_main)
+
+            
+    #         for i, ( pred_mask, soft_mask, prompt, iou_prediction) in enumerate(zip( pred_masks[0], soft_mask_final, prompt_main, iou_predictions)):
+    #             # soft_mask = (soft_mask > 0.).float()
+      
+
+              
+
+    #             loss_focal += focal_loss(pred_mask, soft_mask, num_masks)
+    #             loss_dice += dice_loss(pred_mask, soft_mask, num_masks)
+    #             pred_mask = pred_mask.unsqueeze(0)
+    #             batch_iou = calc_iou(pred_mask, soft_mask)
+    #             iou_prediction = iou_prediction.unsqueeze(1)
+    #             loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
+
+    #         del  pred_masks, iou_predictions
+
+    #         loss_total = 20. * loss_focal + loss_dice #+ loss_iou 
+
+    #         fabric.backward(loss_total)
+
+    #         optimizer.step()
+    #         scheduler.step()
+    #         optimizer.zero_grad()
+    #         torch.cuda.empty_cache()
+
+    #         batch_time.update(time.time() - end)
+    #         end = time.time()
+
+    #         focal_losses.update(loss_focal.item(), 1)
+    #         dice_losses.update(loss_dice.item(), 1)
+    #         iou_losses.update(loss_iou.item(), 1)
+    #         total_losses.update(loss_total.item(), 1)
+ 
+
+    #         if (rank+1) %5==0:
+    #             fabric.print(f'Epoch: [{epoch}][{rank + 1}/{len(train_dataloader)}]'
+    #                          f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
+    #                          f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
+    #                          f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
+    #                          f' | Dice Loss [{dice_losses.val:.4f} ({dice_losses.avg:.4f})]'
+    #                          f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
+    #                          f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
+
+    #         # loss_logger = {
+    #         #     "Focal Loss": focal_losses.avg,
+    #         #     "Dice Loss": dice_losses.avg,
+    #         #     "IoU Loss": iou_losses.avg,
+    #         #     "Total Loss": total_losses.avg
+    #         # }
+    #         # fabric.log_dict(loss_logger, num_iter * (epoch - 1) + iter)
+
+    #         if (rank+1)%40 == 0:
+    #             iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+    #         torch.cuda.empty_cache()
             
         # if epoch % cfg.eval_interval == 0:
         #     iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
