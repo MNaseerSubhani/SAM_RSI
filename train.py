@@ -169,8 +169,8 @@ def train_sam(
 
             batch_size = images_weak.size(0)
             num_insts = sum(len(gt_mask) for gt_mask in gt_masks)
-            if num_insts > cfg.max_nums:
-                bboxes, gt_masks = reduce_instances(bboxes, gt_masks, cfg.max_nums)
+            # if num_insts > cfg.max_nums:
+            #     bboxes, gt_masks = reduce_instances(bboxes, gt_masks, cfg.max_nums)
             prompts = get_prompts(cfg, bboxes, gt_masks)
 
 
@@ -242,7 +242,7 @@ def train_sam(
 
 
 
-            
+
     # focal_loss = FocalLoss()
     # dice_loss = DiceLoss()
     # max_iou = 0.
