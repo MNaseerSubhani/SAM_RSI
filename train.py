@@ -166,7 +166,7 @@ def train_sam(
         #     data_time.update(time.time() - end)
         #     images_weak, images_strong, bboxes, gt_masks, img_paths= data
         #     del data
-        for iter, (entropy_scalar, img_path, render) in enumerate(collected, start=1):
+        for iter, (entropy_scalar, img_path, render) in enumerate(reversed(collected), start=1):
             img_tensor = torch.from_numpy(render['real']).permute(2,0,1).float() / 255.0
             img_tensor = img_tensor.unsqueeze(0).to(fabric.device)
 
