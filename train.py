@@ -269,8 +269,8 @@ def train_sam(
                     soft_mask = (soft_mask > 0.).float()
                     
                     # Apply entropy mask to losses
-                    loss_focal += focal_loss(pred_mask, soft_mask, entropy_mask=entropy_mask, num_masks=num_masks)
-                    loss_dice += dice_loss(pred_mask, soft_mask, entropy_mask=entropy_mask, num_masks=num_masks)
+                    loss_focal += focal_loss(pred_mask, soft_mask, entropy_mask=entropy_mask)
+                    loss_dice += dice_loss(pred_mask, soft_mask, entropy_mask=entropy_mask)
                     batch_iou = calc_iou(pred_mask, soft_mask)
                     loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
 
