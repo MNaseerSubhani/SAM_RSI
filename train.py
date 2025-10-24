@@ -264,7 +264,7 @@ def train_sam(
             loss_iou = torch.tensor(0., device=fabric.device)
 
             
-            print(np.array(soft_masks).shape )
+            print(len(soft_masks))
 
             for i, (pred_mask, soft_mask, prompt, iou_prediction, entropy_mask) in enumerate(
                     zip(pred_masks, soft_masks, prompts, iou_predictions, entropy_masks_binary)
