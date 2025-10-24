@@ -207,7 +207,7 @@ def train_sam(
             scheduler.step()
             optimizer.zero_grad()
             torch.cuda.empty_cache()
-            del images_weak, images_strong, prompts, pred_masks, soft_masks, iou_predictions, gt_masks
+            del images_weak, images_strong, prompts, soft_masks
 
             batch_time.update(time.time() - end)
             end = time.time()
