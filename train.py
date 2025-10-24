@@ -173,18 +173,51 @@ def train_sam(
             #     bboxes, gt_masks = reduce_instances(bboxes, gt_masks, cfg.max_nums)
             prompts = get_prompts(cfg, bboxes, gt_masks)
 
+            ###################
+            entropy_maps, pred_masks, iou_predictions = process_forward(images_weak, prompts, model)
+
+            prompt_1 = prompt_calibration(cfg, entropy_maps, prompts, 1)
+            entropy_maps_1, preds_1, _ = process_forward(img_tensor, prompt_1, model)
+            entr_means_pos = [ent.mean() for ent in entropy_maps_1]
+
+            # Compute relative entropy = mean entropy / (number of 1s in prediction)
+            rel_entr_pos = []
+            for ent, pred in zip(entropy_maps_1, preds_1):
+                num_ones = (pred >0.0 ).sum()
+                rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
+                rel_entr_pos.append(rel_entr)
+
+            prompt_2 = prompt_calibration(cfg, entropy_maps, prompts, 0)
+            entropy_maps_2, preds_2,_ = process_forward(img_tensor, prompt_2, model)
+            entr_means_neg = [ent.mean() for ent in entropy_maps_2]
+
+            rel_entr_neg = []
+            for ent, pred in zip(entropy_maps_2, preds_2):
+                num_ones = (pred > 0.0).sum()
+                rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
+                rel_entr_neg.append(rel_entr)
+
+            soft_masks = []
+            for i in range(len(preds_1)):
+                if rel_entr_pos[i] < rel_entr_neg[i]:
+                    soft_masks.append(preds_1[i])
+                else:
+                    soft_masks.append(preds_2[i])
+
+            ################### 
+
             #1. caculate pairwise IoUs of masks
-            mask_ious, init_masks = cal_mask_ious(cfg, model, images_weak, prompts, gt_masks)
+            # mask_ious, init_masks = cal_mask_ious(cfg, model, images_weak, prompts, gt_masks)
        
             #2. get new prompts through neg_prompt_calibration
-            new_prompts = neg_prompt_calibration(cfg, mask_ious, prompts)
+            # new_prompts = neg_prompt_calibration(cfg, mask_ious, prompts)
 
-            with torch.no_grad():
-                soft_image_embeds, soft_masks, _, _ = model(images_weak, new_prompts)
+            # with torch.no_grad():
+            #     soft_image_embeds, soft_masks, _, _ = model(images_weak, new_prompts)
            
 
-            if isinstance(soft_image_embeds, dict):
-                soft_image_embeds = soft_image_embeds['vision_features']  
+            # if isinstance(soft_image_embeds, dict):
+            #     soft_image_embeds = soft_image_embeds['vision_features']  
             # torch.cuda.empty_cache()
             _, pred_masks, iou_predictions, _= model(images_strong, prompts)   # student
 
@@ -195,7 +228,7 @@ def train_sam(
             loss_dice = torch.tensor(0., device=fabric.device)
             loss_iou = torch.tensor(0., device=fabric.device)
 
-            for i, (embed, pred_mask, soft_mask,  gt_mask, prompt, iou_prediction) in enumerate(zip(soft_image_embeds, pred_masks, soft_masks, gt_masks, prompts, iou_predictions)):
+            for i, ( pred_mask, soft_mask,  gt_mask, prompt, iou_prediction) in enumerate(zip( pred_masks, soft_masks, gt_masks, prompts, iou_predictions)):
                 soft_mask = (soft_mask > 0.).float()
                 
                 loss_focal += focal_loss(pred_mask, soft_mask, num_masks)
@@ -203,7 +236,7 @@ def train_sam(
                 batch_iou = calc_iou(pred_mask, soft_mask)
                 loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
 
-            del soft_image_embeds, pred_masks, iou_predictions, gt_masks 
+            del  pred_masks, iou_predictions, gt_masks 
 
             loss_total = 20. * loss_focal + loss_dice + loss_iou 
 
