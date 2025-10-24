@@ -77,7 +77,7 @@ def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
         _, masks_pred, iou_predictions, _ = model(img_tensor, prompt)
     entropy_maps = []
-    pred_ins = []
+
     for i, mask_p in enumerate( masks_pred[0]):
 
         p = mask_p.clamp(1e-6, 1 - 1e-6)
@@ -86,9 +86,9 @@ def process_forward(img_tensor, prompt, model):
 
         entropy_map = entropy_map_calculate(p)
         entropy_maps.append(entropy_map)
-        pred_ins.append(p)
+        
 
-    return entropy_maps, pred_ins, iou_predictions
+    return entropy_maps, masks_pred, iou_predictions
         
 def entropy_map_calculate(p):
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
@@ -231,7 +231,7 @@ def train_sam(
             for i, ( pred_mask, soft_mask,  gt_mask, prompt, iou_prediction) in enumerate(zip( pred_masks, soft_masks, gt_masks, prompts, iou_predictions)):
                 soft_mask = (soft_mask > 0.).float()
 
-                print(pred_mask.shape, soft_mask.shape)
+                # print(pred_mask.shape, soft_mask.shape)
                 
                 loss_focal += focal_loss(pred_mask, soft_mask, num_masks)
                 loss_dice += dice_loss(pred_mask, soft_mask, num_masks)
