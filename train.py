@@ -66,8 +66,8 @@ def sort_entropy_(model, target_pts):
                 img_path = img_paths[b] if isinstance(img_paths, (list, tuple)) else img_paths
                 collected.append((entropy_scalar, img_path, render))
 
-            if i>10:
-                break
+            # if i>10:
+            #     break
 
     collected.sort(key=lambda x: x[0], reverse=True)
 
@@ -313,10 +313,9 @@ def train_sam(
             loss_focal = loss_focal / num_masks
 
 
-            print(loss_focal.item(), loss_dice.item(), loss_dist.item(), loss_iou.item())
-        
+   
 
-            loss_total = 4. * loss_focal + loss_dice #+ 0.1*loss_dist #+ loss_iou  + 
+            loss_total =   loss_dice + 0.1*loss_dist #+ loss_iou  + loss_focal +
 
             fabric.backward(loss_total)
 
