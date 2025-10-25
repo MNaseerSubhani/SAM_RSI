@@ -269,7 +269,7 @@ def train_sam(
             loss_focal = torch.tensor(0., device=fabric.device)
             loss_dice = torch.tensor(0., device=fabric.device)
             loss_iou = torch.tensor(0., device=fabric.device)
-            loss_distortion = torch.tensor(0., device=fabric.device)
+            loss_dist = torch.tensor(0., device=fabric.device)
 
             entropy_masks_binary = torch.stack(entropy_masks_binary, dim=0)
             entropy_masks_binary = entropy_masks_binary.unsqueeze(0)
