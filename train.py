@@ -315,7 +315,7 @@ def train_sam(
 
    
 
-            loss_total =  loss_focal+ loss_dice + 0.1*loss_dist #+ loss_iou  + loss_focal +
+            loss_total =  0.4*loss_focal+ 0.1*loss_dice + 0.1*loss_dist #+ loss_iou  + loss_focal +
 
             fabric.backward(loss_total)
 
