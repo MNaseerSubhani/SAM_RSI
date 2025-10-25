@@ -66,8 +66,8 @@ def sort_entropy_(model, target_pts):
                 img_path = img_paths[b] if isinstance(img_paths, (list, tuple)) else img_paths
                 collected.append((entropy_scalar, img_path, render))
 
-            # if i>10:
-            #     break
+            if i>10:
+                break
 
     collected.sort(key=lambda x: x[0], reverse=True)
 
@@ -92,11 +92,13 @@ def create_entropy_mask(entropy_maps, threshold=0.5, device='cuda'):
         entropy_masks.append(entropy_mask)
     
     return entropy_masks
+
+
 def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
-        _, masks_pred, iou_predictions, _ = model(img_tensor, prompt)
+        _, masks_pred, _, _ = model(img_tensor, prompt)
     entropy_maps = []
-
+    pred_ins = []
     for i, mask_p in enumerate( masks_pred[0]):
 
         p = mask_p.clamp(1e-6, 1 - 1e-6)
@@ -105,9 +107,22 @@ def process_forward(img_tensor, prompt, model):
 
         entropy_map = entropy_map_calculate(p)
         entropy_maps.append(entropy_map)
+        pred_ins.append(p)
+
+    return entropy_maps, pred_ins
+        
+        
         
 
-    return entropy_maps, masks_pred, iou_predictions
+def edge_corner_score(x, y, x_c, y_c, w, h, gamma=0.7):
+    dx = 2 * torch.abs(x - x_c) / w
+    dy = 2 * torch.abs(y - y_c) / h
+    dx = torch.clamp(dx, 0, 1)
+    dy = torch.clamp(dy, 0, 1)
+    # high on edges + corners, low at center
+    score = (dx + dy - dx * dy) ** gamma
+    return score
+
         
 def entropy_map_calculate(p):
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
@@ -198,10 +213,10 @@ def train_sam(
             # prompts = get_prompts(cfg, bboxes, gt_masks)
 
             ###################
-            entropy_maps, pred_masks, iou_predictions = process_forward(img_tensor, prompts, model)
+            entropy_maps, pred_masks = process_forward(img_tensor, prompts, model)
 
             prompt_1 = prompt_calibration(cfg, entropy_maps, prompts, 1)
-            entropy_maps_1, preds_1, _ = process_forward(img_tensor, prompt_1, model)
+            entropy_maps_1, preds_1 = process_forward(img_tensor, prompt_1, model)
             entr_means_pos = [ent.mean() for ent in entropy_maps_1]
 
             # Compute relative entropy = mean entropy / (number of 1s in prediction)
@@ -212,7 +227,7 @@ def train_sam(
                 rel_entr_pos.append(rel_entr)
 
             prompt_2 = prompt_calibration(cfg, entropy_maps, prompts, 0)
-            entropy_maps_2, preds_2,_ = process_forward(img_tensor, prompt_2, model)
+            entropy_maps_2, preds_2 = process_forward(img_tensor, prompt_2, model)
             entr_means_neg = [ent.mean() for ent in entropy_maps_2]
 
             rel_entr_neg = []
@@ -228,22 +243,14 @@ def train_sam(
                 else:
                     soft_masks.append(preds_2[i])
 
-            ################### 
-
-            #1. caculate pairwise IoUs of masks
-            # mask_ious, init_masks = cal_mask_ious(cfg, model, images_weak, prompts, gt_masks)
-       
-            #2. get new prompts through neg_prompt_calibration
-            # new_prompts = neg_prompt_calibration(cfg, mask_ious, prompts)
-
-            # with torch.no_grad():
-            #     soft_image_embeds, soft_masks, _, _ = model(images_weak, new_prompts)
-           
-
-            # if isinstance(soft_image_embeds, dict):
-            #     soft_image_embeds = soft_image_embeds['vision_features']  
-            # torch.cuda.empty_cache()
+        
             _, pred_masks, iou_predictions, _= model(img_tensor, prompts)   # student
+
+            pred_stack = torch.stack(pred_masks, dim=0)
+            pred_binary = (pred_stack > 0.99).float() 
+            overlap_count = pred_binary.sum(dim=0)
+            overlap_map = (overlap_count > 1).float()
+            invert_overlap_map = 1.0 - overlap_map
 
             entropy_masks = []
             for i, pred_mask in enumerate(pred_masks):
@@ -262,13 +269,35 @@ def train_sam(
             loss_focal = torch.tensor(0., device=fabric.device)
             loss_dice = torch.tensor(0., device=fabric.device)
             loss_iou = torch.tensor(0., device=fabric.device)
+            loss_distortion = torch.tensor(0., device=fabric.device)
 
             entropy_masks_binary = torch.stack(entropy_masks_binary, dim=0)
             entropy_masks_binary = entropy_masks_binary.unsqueeze(0)
 
-            for i, (pred_mask, soft_mask, prompt, iou_prediction, entropy_mask) in enumerate(
-                    zip(pred_masks, soft_masks, prompts, iou_predictions, entropy_masks_binary)
+            for i, (pred_mask, soft_mask, iou_prediction, entropy_mask) in enumerate(
+                    zip(pred_masks[0], soft_masks[0], iou_predictions[0], entropy_masks_binary[0]  )
                 ):
+                    pred_v = (pred[0]>0.99) 
+                    pred_w_overlap = pred_v * invert_overlap_map[0]
+
+
+                    # Find where mask == 1
+                    ys, xs = torch.where(pred_w_overlap > 0.5)
+                    if len(xs) > 0 and len(ys) > 0:
+                        x_min, x_max = xs.min().item(), xs.max().item()
+                        y_min, y_max = ys.min().item(), ys.max().item()
+                        h, w = y_max - y_min, x_max - x_min
+                        print(f"Bounding box: ({x_min}, {y_min}) → ({x_max}, {y_max})") 
+                        cx = (x_min + x_max) / 2.0
+                        cy = (y_min + y_max) / 2.0
+                    else:
+                        print("No 1s found in mask")
+                    # Make sure both tensors are on same device
+                    point_ref = torch.tensor([cx, cy], dtype=torch.float32, device=prompt_main[0][0][i].device)
+                    score = edge_corner_score(prompt_main[0][0][i][0][0].item(), prompt_main[0][0][i][0][0].item(), point_ref[0], point_ref[1], w, h)
+                    
+                    loss_dist+=score
+
                     soft_mask = (soft_mask > 0.).float()
 
                     
@@ -280,7 +309,7 @@ def train_sam(
 
             del  pred_masks, iou_predictions 
 
-            loss_total = 20. * loss_focal + loss_dice #+ loss_iou 
+            loss_total = 4. * loss_focal + loss_dice + loss_dist #+ loss_iou  + 
 
             fabric.backward(loss_total)
 
