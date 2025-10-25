@@ -311,6 +311,9 @@ def train_sam(
             loss_dist = loss_dist / num_masks
             loss_dice = loss_dice / num_masks
             loss_focal = loss_focal / num_masks
+
+
+            print(loss_focal.item(), loss_dice.item(), loss_dist.item(), loss_iou.item())
         
 
             loss_total = 4. * loss_focal + loss_dice #+ 0.1*loss_dist #+ loss_iou  + 
