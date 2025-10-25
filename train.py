@@ -66,8 +66,8 @@ def sort_entropy_(model, target_pts):
                 img_path = img_paths[b] if isinstance(img_paths, (list, tuple)) else img_paths
                 collected.append((entropy_scalar, img_path, render))
 
-            # if i>10:
-            #     break
+            if i>10:
+                break
 
     collected.sort(key=lambda x: x[0], reverse=True)
 
@@ -195,56 +195,30 @@ def train_sam(
         end = time.time()
         num_iter = len(train_dataloader)
 
-        # for iter, data in enumerate(train_dataloader):
+        for iter, data in enumerate(train_dataloader):
 
-        #     data_time.update(time.time() - end)
-        #     images_weak, images_strong, bboxes, gt_masks, img_paths= data
-        #     del data
-        for iter, (entropy_scalar, img_path, render) in enumerate(reversed(collected), start=1):
-            img_tensor = torch.from_numpy(render['real']).permute(2,0,1).float() / 255.0
-            img_tensor = img_tensor.unsqueeze(0).to(fabric.device)
+            data_time.update(time.time() - end)
+            images_weak, images_strong, bboxes, gt_masks, img_paths= data
+            del data
+        # for iter, (entropy_scalar, img_path, render) in enumerate(reversed(collected), start=1):
+        #     img_tensor = torch.from_numpy(render['real']).permute(2,0,1).float() / 255.0
+        #     img_tensor = img_tensor.unsqueeze(0).to(fabric.device)
 
-            prompts = render['prompt']
-
-            batch_size = img_tensor.size(0)
-            # num_insts = sum(len(gt_mask) for gt_mask in gt_masks)
+        #     prompts = render['prompt']
+            
             # if num_insts > cfg.max_nums:
             #     bboxes, gt_masks = reduce_instances(bboxes, gt_masks, cfg.max_nums)
-            # prompts = get_prompts(cfg, bboxes, gt_masks)
+            prompts = get_prompts(cfg, bboxes, gt_masks)
 
-            ###################
-            entropy_maps, pred_masks = process_forward(img_tensor, prompts, model)
-
-            prompt_1 = prompt_calibration(cfg, entropy_maps, prompts, 1)
-            entropy_maps_1, preds_1 = process_forward(img_tensor, prompt_1, model)
-            entr_means_pos = [ent.mean() for ent in entropy_maps_1]
-
-            # Compute relative entropy = mean entropy / (number of 1s in prediction)
-            rel_entr_pos = []
-            for ent, pred in zip(entropy_maps_1, preds_1):
-                num_ones = (pred >0.0 ).sum()
-                rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
-                rel_entr_pos.append(rel_entr)
-
-            prompt_2 = prompt_calibration(cfg, entropy_maps, prompts, 0)
-            entropy_maps_2, preds_2 = process_forward(img_tensor, prompt_2, model)
-            entr_means_neg = [ent.mean() for ent in entropy_maps_2]
-
-            rel_entr_neg = []
-            for ent, pred in zip(entropy_maps_2, preds_2):
-                num_ones = (pred > 0.0).sum()
-                rel_entr = ent.mean()/ num_ones if num_ones > 0 else float('inf')
-                rel_entr_neg.append(rel_entr)
-
-            soft_masks = []
-            for i in range(len(preds_1)):
-                if rel_entr_pos[i] < rel_entr_neg[i]:
-                    soft_masks.append(preds_1[i])
-                else:
-                    soft_masks.append(preds_2[i])
-
+            
+            # 3. start training using new prompt
+            with torch.no_grad():
+                soft_image_embeds, soft_masks, _, _ = model(images_weak, prompts)    # teacher
+            del _
+            # batch_size = img_tensor.size(0)
+            num_insts = sum(len(gt_mask) for gt_mask in gt_masks)
         
-            _, pred_masks, iou_predictions, _= model(img_tensor, prompts)   # student
+            _, pred_masks, iou_predictions, _= model(images_strong, prompts)   # student
 
             pred_stack = torch.stack(pred_masks, dim=0)
             pred_binary = (pred_stack > 0.99).float() 
@@ -315,7 +289,7 @@ def train_sam(
 
    
 
-            loss_total =  0.4*loss_focal+ 0.1*loss_dice + 0.1*loss_dist #+ loss_iou  + loss_focal +
+            loss_total =  0.1*loss_dice + 0.1*loss_dist #+ loss_iou  + loss_focal +
 
             fabric.backward(loss_total)
 
