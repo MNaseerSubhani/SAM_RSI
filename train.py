@@ -293,8 +293,8 @@ def train_sam(
                     else:
                         print("No 1s found in mask")
                     # Make sure both tensors are on same device
-                    point_ref = torch.tensor([cx, cy], dtype=torch.float32, device=prompt_main[0][0][i].device)
-                    score = edge_corner_score(prompt_main[0][0][i][0][0].item(), prompt_main[0][0][i][0][0].item(), point_ref[0], point_ref[1], w, h)
+                    point_ref = torch.tensor([cx, cy], dtype=torch.float32, device=prompts[0][0][i].device)
+                    score = edge_corner_score(prompts[0][0][i][0][0].item(), prompts[0][0][i][0][0].item(), point_ref[0], point_ref[1], w, h)
                     
                     loss_dist+=score
 
