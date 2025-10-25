@@ -66,8 +66,8 @@ def sort_entropy_(model, target_pts):
                 img_path = img_paths[b] if isinstance(img_paths, (list, tuple)) else img_paths
                 collected.append((entropy_scalar, img_path, render))
 
-            if i>10:
-                break
+            # if i>10:
+            #     break
 
     collected.sort(key=lambda x: x[0], reverse=True)
 
