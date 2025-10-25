@@ -287,7 +287,7 @@ def train_sam(
                         x_min, x_max = xs.min().item(), xs.max().item()
                         y_min, y_max = ys.min().item(), ys.max().item()
                         h, w = y_max - y_min, x_max - x_min
-                        print(f"Bounding box: ({x_min}, {y_min}) → ({x_max}, {y_max})") 
+                
                         cx = (x_min + x_max) / 2.0
                         cy = (y_min + y_max) / 2.0
                     else:
@@ -305,7 +305,7 @@ def train_sam(
                     loss_focal += focal_loss(pred_mask, soft_mask, entropy_mask=entropy_mask)
                     loss_dice += dice_loss(pred_mask, soft_mask, entropy_mask=entropy_mask)
                     batch_iou = calc_iou(pred_mask.unsqueeze(0), soft_mask.unsqueeze(0))
-                    loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
+                    loss_iou += F.mse_loss(iou_prediction.view(-1), batch_iou.view(-1), reduction='sum') / num_masks
 
             del  pred_masks, iou_predictions 
 
