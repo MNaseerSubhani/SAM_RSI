@@ -201,7 +201,7 @@ def train_sam(
         #     images_weak, images_strong, bboxes, gt_masks, img_paths= data
         #     del data
 
-        for rank, (entropy_scalar, img_path, render) in enumerate(collected, start=1):
+        for iter, (entropy_scalar, img_path, render) in enumerate(collected, start=1):
             img_name = os.path.splitext(os.path.basename(img_path))[0]
 
             # ---- Convert and move to device
