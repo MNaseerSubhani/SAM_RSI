@@ -178,7 +178,7 @@ def train_sam(
     val_dataloader: DataLoader,
     target_pts,
 ):
-    # collected = sort_entropy_(model, target_pts)
+    collected = sort_entropy_(model, target_pts)
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
     max_iou = 0.
@@ -195,12 +195,26 @@ def train_sam(
         end = time.time()
         num_iter = len(train_dataloader)
 
-        for iter, data in enumerate(train_dataloader):
+        # for iter, data in enumerate(train_dataloader):
 
-            data_time.update(time.time() - end)
-            images_weak, images_strong, bboxes, gt_masks, img_paths= data
-            del data
-            prompts = get_prompts(cfg, bboxes, gt_masks)
+        #     data_time.update(time.time() - end)
+        #     images_weak, images_strong, bboxes, gt_masks, img_paths= data
+        #     del data
+
+        for rank, (entropy_scalar, img_path, render) in enumerate(collected, start=1):
+            img_name = os.path.splitext(os.path.basename(img_path))[0]
+
+            # ---- Convert and move to device
+            img_np = render['real']        # numpy HxWx3
+            images_weak = torch.from_numpy(img_np).permute(2,0,1).float() / 255.0
+            images_weak = images_weak.unsqueeze(0).to(fabric.device)
+
+            prompts = render['prompt']
+
+
+
+
+            # prompts = get_prompts(cfg, bboxes, gt_masks)
 
             batch_size = images_weak.size(0)
 
@@ -242,7 +256,7 @@ def train_sam(
 
 
 
-            _, pred_masks, iou_predictions, _= model(images_strong, prompts)
+            _, pred_masks, iou_predictions, _= model(images_weak, prompts)
             del _
 
 
