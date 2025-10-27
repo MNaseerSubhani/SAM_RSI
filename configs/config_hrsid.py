@@ -1,3 +1,6 @@
+
+
+
 from box import Box
 from configs.base_config import base_config
 
@@ -10,12 +13,11 @@ config = {
     "val_batchsize": 1,
     "num_workers": 0,
     "num_epochs": 10,
-    "max_nums": 50,
     "resume": False,
 
-    "start_lora_layer": 1,
+
+    "start_lora_layer": 6,
     "lora_rank": 4,
-    "mem_bank_max_len": 512,
     "match_interval": 30,
     "iou_thr": 0.1,
 
@@ -31,10 +33,11 @@ config = {
         "learning_rate": 5e-4,
         "weight_decay": 1e-4,
         "decay_factor": 10,
-        "steps": [1500, 2000],
+        "steps": [2000, 4000],
         "warmup_steps": 250,
     },
 }
 
 cfg = Box(base_config)
 cfg.merge_update(config)
+
