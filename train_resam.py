@@ -280,7 +280,7 @@ def train_sam(
 
             loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
 
-            del loss_dice, loss_iou, loss_focal
+            
 
             fabric.backward(loss_total)
 
@@ -298,7 +298,7 @@ def train_sam(
             iou_losses.update(loss_iou.item(), batch_size)
             total_losses.update(loss_total.item(), batch_size)
           
-
+            del loss_dice, loss_iou, loss_focal
             if (iter+1) %match_interval==0:
                 fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
                              f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
