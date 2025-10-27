@@ -8,43 +8,25 @@ from scipy.optimize import linear_sum_assignment
 ALPHA = 0.8
 GAMMA = 2
 
-# class FocalLoss(nn.Module):
-
-#     def __init__(self, weight=None, size_average=True):
-#         super().__init__()
-
-#     # def forward(self, inputs, targets, alpha=ALPHA, gamma=GAMMA, smooth=1):
-#     #     inputs = F.sigmoid(inputs)
-#     #     inputs = torch.clamp(inputs, min=0, max=1)
-#     #     #flatten label and prediction tensors
-#     #     inputs = inputs.view(-1)
-#     #     targets = targets.view(-1)
-
-#     #     BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
-#     #     BCE_EXP = torch.exp(-BCE)
-#     #     focal_loss = alpha * (1 - BCE_EXP)**gamma * BCE
-
-#     #     return focal_loss
-
-#     def forward(self, inputs, targets, alpha=ALPHA, gamma=GAMMA, smooth=1):
-#         inputs = F.sigmoid(inputs)
-#         inputs = torch.clamp(inputs, min=0, max=1)
-#         #flatten label and prediction tensors
-#         inputs = inputs.view(-1)
-#         targets = targets.view(-1)
-
-#         BCE = F.binary_cross_entropy(inputs, targets, reduction='none')
-#         BCE_EXP = torch.exp(-BCE)
-#         focal_loss = alpha * (1 - BCE_EXP)**gamma * BCE
-#         focal_loss = focal_loss.mean()
-
-#         return focal_loss.mean()
-# In utils/losses.py - modify FocalLoss
 class FocalLoss(nn.Module):
+
     def __init__(self, weight=None, size_average=True):
         super().__init__()
 
-    def forward(self, inputs, targets, entropy_mask=None, alpha=ALPHA, gamma=GAMMA, smooth=1):
+    # def forward(self, inputs, targets, alpha=ALPHA, gamma=GAMMA, smooth=1):
+    #     inputs = F.sigmoid(inputs)
+    #     inputs = torch.clamp(inputs, min=0, max=1)
+    #     #flatten label and prediction tensors
+    #     inputs = inputs.view(-1)
+    #     targets = targets.view(-1)
+
+    #     BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
+    #     BCE_EXP = torch.exp(-BCE)
+    #     focal_loss = alpha * (1 - BCE_EXP)**gamma * BCE
+
+    #     return focal_loss
+
+    def forward(self, inputs, targets, alpha=ALPHA, gamma=GAMMA, smooth=1):
         inputs = F.sigmoid(inputs)
         inputs = torch.clamp(inputs, min=0, max=1)
         #flatten label and prediction tensors
@@ -54,14 +36,32 @@ class FocalLoss(nn.Module):
         BCE = F.binary_cross_entropy(inputs, targets, reduction='none')
         BCE_EXP = torch.exp(-BCE)
         focal_loss = alpha * (1 - BCE_EXP)**gamma * BCE
-        
-        # Apply entropy mask if provided
-        if entropy_mask is not None:
-            entropy_mask = entropy_mask.view(-1)
-            focal_loss = focal_loss * entropy_mask
-        
         focal_loss = focal_loss.mean()
+
         return focal_loss.mean()
+# In utils/losses.py - modify FocalLoss
+# class FocalLoss(nn.Module):
+#     def __init__(self, weight=None, size_average=True):
+#         super().__init__()
+
+#     def forward(self, inputs, targets, entropy_mask=None, alpha=ALPHA, gamma=GAMMA, smooth=1):
+#         inputs = F.sigmoid(inputs)
+#         inputs = torch.clamp(inputs, min=0, max=1)
+#         #flatten label and prediction tensors
+#         inputs = inputs.view(-1)
+#         targets = targets.view(-1)
+
+#         BCE = F.binary_cross_entropy(inputs, targets, reduction='none')
+#         BCE_EXP = torch.exp(-BCE)
+#         focal_loss = alpha * (1 - BCE_EXP)**gamma * BCE
+        
+#         # Apply entropy mask if provided
+#         if entropy_mask is not None:
+#             entropy_mask = entropy_mask.view(-1)
+#             focal_loss = focal_loss * entropy_mask
+        
+#         focal_loss = focal_loss.mean()
+#         return focal_loss.mean()
 
 
 
@@ -77,37 +77,14 @@ def dice_coefficient(x, target):
     loss = 1. - (2 * intersection / union)
     return loss
     
-# class DiceLoss(nn.Module):
-
-#     def __init__(self, weight=None, size_average=True):
-#         super().__init__()
-
-#     def forward(self, inputs, targets, smooth=1):
-#         inputs = F.sigmoid(inputs)
-#         inputs = torch.clamp(inputs, min=0, max=1)
-#         #flatten label and prediction tensors
-#         inputs = inputs.view(-1)
-#         targets = targets.view(-1)
-
-#         intersection = (inputs * targets).sum()
-#         dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
-
-#         return 1 - dice
-
- 
 class DiceLoss(nn.Module):
+
     def __init__(self, weight=None, size_average=True):
         super().__init__()
 
-    def forward(self, inputs, targets, entropy_mask=None, smooth=1):
+    def forward(self, inputs, targets, smooth=1):
         inputs = F.sigmoid(inputs)
         inputs = torch.clamp(inputs, min=0, max=1)
-        
-        # Apply entropy mask if provided
-        if entropy_mask is not None:
-            inputs = inputs * entropy_mask
-            targets = targets * entropy_mask
-        
         #flatten label and prediction tensors
         inputs = inputs.view(-1)
         targets = targets.view(-1)
@@ -116,6 +93,29 @@ class DiceLoss(nn.Module):
         dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
 
         return 1 - dice
+
+ 
+# class DiceLoss(nn.Module):
+#     def __init__(self, weight=None, size_average=True):
+#         super().__init__()
+
+#     def forward(self, inputs, targets, entropy_mask=None, smooth=1):
+#         inputs = F.sigmoid(inputs)
+#         inputs = torch.clamp(inputs, min=0, max=1)
+        
+#         # Apply entropy mask if provided
+#         if entropy_mask is not None:
+#             inputs = inputs * entropy_mask
+#             targets = targets * entropy_mask
+        
+#         #flatten label and prediction tensors
+#         inputs = inputs.view(-1)
+#         targets = targets.view(-1)
+
+#         intersection = (inputs * targets).sum()
+#         dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+
+#         return 1 - dice
 
 class ContraLoss(nn.Module):
 
