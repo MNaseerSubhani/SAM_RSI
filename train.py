@@ -202,7 +202,7 @@ def train_sam(
             del data
             prompts = get_prompts(cfg, bboxes, gt_masks)
 
-            batch_size = img_tensor.size(0)
+            batch_size = images_weak.size(0)
 
             entropy_maps, preds = process_forward(images_weak, prompts, model)
             pred_stack = torch.stack(preds, dim=0)
