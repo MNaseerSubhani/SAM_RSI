@@ -270,7 +270,7 @@ def train_sam(
                     batch_iou = calc_iou(pred_mask.unsqueeze(0), soft_mask.unsqueeze(0))
                     loss_iou += F.mse_loss(iou_prediction.view(-1), batch_iou.view(-1), reduction='sum') / num_masks
 
-    q       
+           
             del  pred_masks, iou_predictions 
             # loss_dist = loss_dist / num_masks
             loss_dice = loss_dice / num_masks
