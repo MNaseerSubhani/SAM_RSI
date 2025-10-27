@@ -178,7 +178,7 @@ def train_sam(
     val_dataloader: DataLoader,
     target_pts,
 ):
-    # collected = sort_entropy_(model, target_pts)
+    collected = sort_entropy_(model, target_pts)
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
     max_iou = 0.
@@ -200,49 +200,81 @@ def train_sam(
             data_time.update(time.time() - end)
             images_weak, images_strong, bboxes, gt_masks, img_paths= data
             del data
+        # for iter, (entropy_scalar, img_path, render) in enumerate(reversed(collected), start=1):
+        #     img_tensor = torch.from_numpy(render['real']).permute(2,0,1).float() / 255.0
+        #     img_tensor = img_tensor.unsqueeze(0).to(fabric.device)
+
+        #     prompts = render['prompt']
+            
+            # if num_insts > cfg.max_nums:
+            #     bboxes, gt_masks = reduce_instances(bboxes, gt_masks, cfg.max_nums)
             prompts = get_prompts(cfg, bboxes, gt_masks)
 
-            entropy_maps, preds = process_forward(images_weak, prompts, model)
-            pred_stack = torch.stack(preds, dim=0)
+            
+            # 3. start training using new prompt
+            with torch.no_grad():
+                soft_image_embeds, soft_masks, _, _ = model(images_weak, prompts)    # teacher
+            del _
+            # batch_size = img_tensor.size(0)
+            num_insts = sum(len(gt_mask) for gt_mask in gt_masks)
+        
+            _, pred_masks, iou_predictions, _= model(images_strong, prompts)   # student
+
+            pred_stack = torch.stack(pred_masks, dim=0)
             pred_binary = (pred_stack > 0.99).float() 
             overlap_count = pred_binary.sum(dim=0)
             overlap_map = (overlap_count > 1).float()
             invert_overlap_map = 1.0 - overlap_map
 
+            entropy_masks = []
+            for i, pred_mask in enumerate(pred_masks):
+                # Calculate entropy for this prediction
+                p = pred_mask.clamp(1e-6, 1 - 1e-6)
+                if p.ndim == 2:
+                    p = p.unsqueeze(0)
+                entropy_map = entropy_map_calculate(p)
+                entropy_masks.append(entropy_map)
 
-            soft_masks = []
-            for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
-                entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
-                entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
-                pred = (pred[0]>0.99)
-                pred_w_overlap = pred * invert_overlap_map[0]
-
-                soft_masks.append(pred_w_overlap)
-
-
-
-
-            _, pred_masks, iou_predictions, _= model(images_strong, prompts)
+            entropy_masks_binary = create_entropy_mask(entropy_maps, threshold=0.5, device=fabric.device)
+       
             del _
 
-
-
-        
-        
             num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
             loss_focal = torch.tensor(0., device=fabric.device)
             loss_dice = torch.tensor(0., device=fabric.device)
             loss_iou = torch.tensor(0., device=fabric.device)
+            loss_dist = torch.tensor(0., device=fabric.device)
 
-
-       
+            entropy_masks_binary = torch.stack(entropy_masks_binary, dim=0)
+            entropy_masks_binary = entropy_masks_binary.unsqueeze(0)
 
             for i, (pred_mask, soft_mask, iou_prediction, entropy_mask) in enumerate(
                     zip(pred_masks[0], soft_masks[0], iou_predictions[0], entropy_masks_binary[0]  )
                 ):
-                   
+                    pred_v = (pred[0]>0.99) 
+                    pred_w_overlap = pred_v * invert_overlap_map[0]
+
+
+                    # Find where mask == 1
+                    ys, xs = torch.where(pred_w_overlap > 0.5)
+                    if len(xs) > 0 and len(ys) > 0:
+                        x_min, x_max = xs.min().item(), xs.max().item()
+                        y_min, y_max = ys.min().item(), ys.max().item()
+                        h, w = y_max - y_min, x_max - x_min
+                
+                        cx = (x_min + x_max) / 2.0
+                        cy = (y_min + y_max) / 2.0
+                    else:
+                        print("No 1s found in mask")
+                    # Make sure both tensors are on same device
+                    point_ref = torch.tensor([cx, cy], dtype=torch.float32, device=prompts[0][0][i].device)
+                    score = edge_corner_score(prompts[0][0][i][0][0].item(), prompts[0][0][i][0][1].item(), point_ref[0], point_ref[1], w, h)
+                    
+                    loss_dist+=score
 
                     soft_mask = (soft_mask > 0.).float()
+
+                    
                     # Apply entropy mask to losses
                     loss_focal += focal_loss(pred_mask, soft_mask, entropy_mask=entropy_mask)
                     loss_dice += dice_loss(pred_mask, soft_mask, entropy_mask=entropy_mask)
@@ -257,7 +289,7 @@ def train_sam(
 
    
 
-            loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
+            loss_total =  0.1*loss_dice + 0.1*loss_dist #+ loss_iou  + loss_focal +
 
             fabric.backward(loss_total)
 
