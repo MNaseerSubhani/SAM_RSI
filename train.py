@@ -241,6 +241,7 @@ def train_sam(
                     zip(pred_masks[0], soft_masks[0], iou_predictions[0]  )
                 ):
                    
+                    print(soft_mask.shape, pred_mask.shape)
 
                     soft_mask = (soft_mask > 0.).float()
                     # Apply entropy mask to losses
