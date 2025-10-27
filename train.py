@@ -213,13 +213,31 @@ def train_sam(
 
 
             soft_masks = []
+            bboxes = []
             for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
                 entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
                 entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
                 pred = (pred[0]>0.99)
                 pred_w_overlap = pred * invert_overlap_map[0]
 
-                soft_masks.append(pred_w_overlap)
+                ys, xs = torch.where(pred_w_overlap > 0.5)
+                if len(xs) > 0 and len(ys) > 0:
+                    x_min, x_max = xs.min().item(), xs.max().item()
+                    y_min, y_max = ys.min().item(), ys.max().item()
+                else:
+                    print("No 1s found in mask")
+                
+                bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
+
+            bboxes = torch.stack(bboxes)
+
+            with torch.no_grad():
+                _, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
+            
+
+            
+            
+            # soft_masks.append(pred_w_overlap)
 
 
 
@@ -240,7 +258,7 @@ def train_sam(
        
 
             for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
-                    zip(pred_masks[0], soft_masks, iou_predictions[0]  )
+                    zip(pred_masks[0], soft_masks[0], iou_predictions[0]  )
                 ):
                    
      
