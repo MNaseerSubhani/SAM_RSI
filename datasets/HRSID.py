@@ -44,7 +44,9 @@ class HRSIDDataset(Dataset):
     def __getitem__(self, idx):
         image_id = self.image_ids[idx]
         image_info = self.coco.loadImgs(image_id)[0]
+        image_info["file_name"] = image_info["file_name"].replace(".jpg", ".png")
         image_path = os.path.join(self.root_dir, image_info["file_name"])
+
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         ann_ids = self.coco.getAnnIds(imgIds=image_id)#the num of objects in one image
