@@ -373,7 +373,7 @@ def main(cfg: Box) -> int:
         model.setup()
 
     load_datasets = call_load_dataset(cfg)
-    train_data, val_data, pt_data = load_datasets(cfg, img_size=512, return_pt = True)
+    train_data, val_data, pt_data = load_datasets(cfg, img_size=1024, return_pt = True)
     train_data = fabric._setup_dataloader(train_data)
     val_data = fabric._setup_dataloader(val_data)
     pt_data = fabric._setup_dataloader(pt_data)
