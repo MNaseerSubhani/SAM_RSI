@@ -232,7 +232,7 @@ def train_sam(
             flag_train = True
 
 
-            print(len(entropy_maps))
+            
             point_list = []
             point_labels_list = []
             for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
@@ -266,10 +266,10 @@ def train_sam(
             new_prompts = [(point_, point_labels_)]
             # print(new_prompts[0].shape)
 
-            del entropy_maps, preds, overlap_map, invert_overlap_map
+            # del entropy_maps, preds, overlap_map, invert_overlap_map
             torch.cuda.empty_cache()
                 
-            if True :
+            if True and len(entropy_maps) < 70:
                 bboxes = torch.stack(bboxes)
 
                 with torch.no_grad():
