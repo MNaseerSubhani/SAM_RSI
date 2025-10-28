@@ -231,9 +231,13 @@ def train_sam(
             point_labels_list = []
             flag_train = True
 
-            print(prompts)
 
+            point_list = []
+            point_labels_list = []
             for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
+                point_coords = prompts[0][0][i][:].unsqueeze(0)
+                point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
+
                 entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
                 entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
                 pred = (pred[0]>0.99)
@@ -245,20 +249,23 @@ def train_sam(
                     x_min, x_max = xs.min().item(), xs.max().item()
                     y_min, y_max = ys.min().item(), ys.max().item()
                     bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
-                    point_list.append(prompts[0][0][i])
-                    
-                    point_labels_list.append(prompts[0][1][i])
+
+                    # point_coords_all = (point_coords)
+                    # point_labels_all = torch.cat(
+                    # (point_coords_lab))
+                    point_list.append(point_coords)
+                    point_labels_list.append(point_coords_lab)
                 else:
 
                     flag_train  = False
+                    
                     # print("No 1s found in mask")
-            point_list = torch.cat(point_list)
-            print(point_list.shape)
-
+            point_ = torch.cat(point_list).squeeze(1)
             point_labels_ = torch.cat(point_labels_list)
-            print(point_labels_.shape)
-            new_prompts = [(point_list, point_labels_)]
+            new_prompts = [(point_, point_labels_)]
             # print(new_prompts[0].shape)
+
+     
                 
             if True :
                 bboxes = torch.stack(bboxes)
