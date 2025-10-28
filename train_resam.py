@@ -298,7 +298,7 @@ def train_sam(
         
 
                 for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
-                        zip(pred_masks[0], soft_masks[0], iou_predictions[0]  )
+                        zip(pred_masks, soft_masks, iou_predictions  )
                     ):
                     
         
