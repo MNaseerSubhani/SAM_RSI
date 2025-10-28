@@ -238,12 +238,13 @@ def train_sam(
                 if len(xs) > 0 and len(ys) > 0:
                     x_min, x_max = xs.min().item(), xs.max().item()
                     y_min, y_max = ys.min().item(), ys.max().item()
+                    bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
                 else:
                     flag_train  = False
                     print("No 1s found in mask")
                 
-                bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
-            if flag_train :
+                
+            if True :
                 bboxes = torch.stack(bboxes)
 
                 with torch.no_grad():

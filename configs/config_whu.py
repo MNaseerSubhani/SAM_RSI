@@ -16,7 +16,7 @@ config = {
     "resume": False,
 
 
-    "start_lora_layer": 6,
+    "start_lora_layer": 1,
     "lora_rank": 4,
     "match_interval": 30,
     "iou_thr": 0.1,
@@ -33,7 +33,7 @@ config = {
         "learning_rate": 5e-4,
         "weight_decay": 1e-4,
         "decay_factor": 10,
-        "steps": [2000, 4000],
+        "steps": [8000, 15000],
         "warmup_steps": 250,
     },
 }
