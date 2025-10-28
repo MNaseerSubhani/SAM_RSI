@@ -227,6 +227,7 @@ def train_sam(
 
             soft_masks = []
             bboxes = []
+            point_list = []
             flag_train = True
             for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
                 entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
@@ -239,10 +240,12 @@ def train_sam(
                     x_min, x_max = xs.min().item(), xs.max().item()
                     y_min, y_max = ys.min().item(), ys.max().item()
                     bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
+                    point_list.append(prompts[0][0][i])
                 else:
+
                     flag_train  = False
-                    print("No 1s found in mask")
-                
+                    # print("No 1s found in mask")
+            point_list = torch.cat(point_list).squeeze(1)
                 
             if True :
                 bboxes = torch.stack(bboxes)
@@ -258,7 +261,7 @@ def train_sam(
 
 
 
-                _, pred_masks, iou_predictions, _= model(images_strong, prompts)
+                _, pred_masks, iou_predictions, _= model(images_strong, point_list)
                 del _
 
 
