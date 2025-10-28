@@ -230,11 +230,13 @@ def train_sam(
             point_list = []
             point_labels_list = []
             flag_train = True
+            print(prompts)
             for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
                 entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
                 entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
                 pred = (pred[0]>0.99)
                 pred_w_overlap = pred * invert_overlap_map[0]
+
 
                 ys, xs = torch.where(pred_w_overlap > 0.5)
                 if len(xs) > 0 and len(ys) > 0:
@@ -242,7 +244,7 @@ def train_sam(
                     y_min, y_max = ys.min().item(), ys.max().item()
                     bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
                     point_list.append(prompts[0][0][i])
-                    print(prompts[0][1][i])
+                    
                     point_labels_list.append(prompts[0][1][i])
                 else:
 
