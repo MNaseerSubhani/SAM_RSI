@@ -248,7 +248,10 @@ def train_sam(
                     flag_train  = False
                     # print("No 1s found in mask")
             point_list = torch.cat(point_list)
+            print(point_list.shape)
+
             point_labels_ = torch.cat(point_labels_list)
+            print(point_labels_.shape)
             new_prompts = [(point_list, point_labels_)]
             # print(new_prompts[0].shape)
                 
