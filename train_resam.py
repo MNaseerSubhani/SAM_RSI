@@ -246,6 +246,7 @@ def train_sam(
                     flag_train  = False
                     # print("No 1s found in mask")
             point_list = torch.cat(point_list).squeeze(1)
+            print(point_list.shape)
                 
             if True :
                 bboxes = torch.stack(bboxes)
