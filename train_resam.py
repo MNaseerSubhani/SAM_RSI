@@ -227,6 +227,7 @@ def train_sam(
 
             soft_masks = []
             bboxes = []
+            flag_train = True
             for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
                 entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
                 entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
@@ -238,81 +239,82 @@ def train_sam(
                     x_min, x_max = xs.min().item(), xs.max().item()
                     y_min, y_max = ys.min().item(), ys.max().item()
                 else:
+                    flag_train  = False
                     print("No 1s found in mask")
                 
                 bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
+            if flag_train :
+                bboxes = torch.stack(bboxes)
 
-            bboxes = torch.stack(bboxes)
+                with torch.no_grad():
+                    _, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                
 
-            with torch.no_grad():
-                _, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                
+                
+                # soft_masks.append(pred_w_overlap)
+
+
+
+
+                _, pred_masks, iou_predictions, _= model(images_strong, prompts)
+                del _
+
+
+
             
-
             
-            
-            # soft_masks.append(pred_w_overlap)
-
-
-
-
-            _, pred_masks, iou_predictions, _= model(images_strong, prompts)
-            del _
-
+                num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
+                loss_focal = torch.tensor(0., device=fabric.device)
+                loss_dice = torch.tensor(0., device=fabric.device)
+                loss_iou = torch.tensor(0., device=fabric.device)
 
 
         
+
+                for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
+                        zip(pred_masks[0], soft_masks[0], iou_predictions[0]  )
+                    ):
+                    
         
-            num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
-            loss_focal = torch.tensor(0., device=fabric.device)
-            loss_dice = torch.tensor(0., device=fabric.device)
-            loss_iou = torch.tensor(0., device=fabric.device)
 
-
-       
-
-            for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
-                    zip(pred_masks[0], soft_masks[0], iou_predictions[0]  )
-                ):
-                   
-     
-
-                    soft_mask = (soft_mask > 0.).float()
-                    # Apply entropy mask to losses
-                    loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
-                    loss_dice += dice_loss(pred_mask, soft_mask)   #, entropy_mask=entropy_mask
-                    batch_iou = calc_iou(pred_mask.unsqueeze(0), soft_mask.unsqueeze(0))
-                    loss_iou += F.mse_loss(iou_prediction.view(-1), batch_iou.view(-1), reduction='sum') / num_masks
-
-           
-            del  pred_masks, iou_predictions 
-            # loss_dist = loss_dist / num_masks
-            loss_dice = loss_dice / num_masks
-            loss_focal = loss_focal / num_masks
-            torch.cuda.empty_cache()
-
-
-   
-
-            loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
+                        soft_mask = (soft_mask > 0.).float()
+                        # Apply entropy mask to losses
+                        loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
+                        loss_dice += dice_loss(pred_mask, soft_mask)   #, entropy_mask=entropy_mask
+                        batch_iou = calc_iou(pred_mask.unsqueeze(0), soft_mask.unsqueeze(0))
+                        loss_iou += F.mse_loss(iou_prediction.view(-1), batch_iou.view(-1), reduction='sum') / num_masks
 
             
+                del  pred_masks, iou_predictions 
+                # loss_dist = loss_dist / num_masks
+                loss_dice = loss_dice / num_masks
+                loss_focal = loss_focal / num_masks
+                torch.cuda.empty_cache()
 
-            fabric.backward(loss_total)
 
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
-            torch.cuda.empty_cache()
-            del  prompts, soft_masks
+    
 
-            batch_time.update(time.time() - end)
-            end = time.time()
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
 
-            focal_losses.update(loss_focal.item(), batch_size)
-            dice_losses.update(loss_dice.item(), batch_size)
-            iou_losses.update(loss_iou.item(), batch_size)
-            total_losses.update(loss_total.item(), batch_size)
-          
+                
+
+                fabric.backward(loss_total)
+
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+                torch.cuda.empty_cache()
+                del  prompts, soft_masks
+
+                batch_time.update(time.time() - end)
+                end = time.time()
+
+                focal_losses.update(loss_focal.item(), batch_size)
+                dice_losses.update(loss_dice.item(), batch_size)
+                iou_losses.update(loss_iou.item(), batch_size)
+                total_losses.update(loss_total.item(), batch_size)
+            
             del loss_dice, loss_iou, loss_focal
             if (iter+1) %match_interval==0:
                 fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
@@ -397,11 +399,11 @@ def main(cfg: Box) -> int:
         full_checkpoint = fabric.load(cfg.model.ckpt)
         model.load_state_dict(full_checkpoint["model"])
         optimizer.load_state_dict(full_checkpoint["optimizer"])
-    print('-'*100)
-    print('\033[92mDirect test on the original SAM.\033[0m') 
-    _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
-    print('-'*100)
-    del _     
+    # print('-'*100)
+    # print('\033[92mDirect test on the original SAM.\033[0m') 
+    # _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    # print('-'*100)
+    # del _     
 
 
 
