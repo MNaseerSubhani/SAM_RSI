@@ -265,7 +265,8 @@ def train_sam(
             new_prompts = [(point_, point_labels_)]
             # print(new_prompts[0].shape)
 
-     
+            del entropy_maps, preds, overlap_map, invert_overlap_map
+            torch.cuda.empty_cache()
                 
             if True :
                 bboxes = torch.stack(bboxes)
@@ -423,11 +424,11 @@ def main(cfg: Box) -> int:
         full_checkpoint = fabric.load(cfg.model.ckpt)
         model.load_state_dict(full_checkpoint["model"])
         optimizer.load_state_dict(full_checkpoint["optimizer"])
-    print('-'*100)
-    print('\033[92mDirect test on the original SAM.\033[0m') 
-    _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
-    print('-'*100)
-    del _     
+    # print('-'*100)
+    # print('\033[92mDirect test on the original SAM.\033[0m') 
+    # _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    # print('-'*100)
+    # del _     
 
 
 
