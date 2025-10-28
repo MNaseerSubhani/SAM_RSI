@@ -160,3 +160,8 @@ If you find this project useful in your research, please consider starring ⭐ a
   doi={10.1109/TGRS.2025.3529031}}
 
 ```
+
+
+Place Whu train and val folder in whu folder
+
+for hrsid only sacve images
