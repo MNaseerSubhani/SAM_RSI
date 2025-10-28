@@ -242,6 +242,7 @@ def train_sam(
                     y_min, y_max = ys.min().item(), ys.max().item()
                     bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
                     point_list.append(prompts[0][0][i])
+                    print(prompts[0][1][i])
                     point_labels_list.append(prompts[0][1][i])
                 else:
 
