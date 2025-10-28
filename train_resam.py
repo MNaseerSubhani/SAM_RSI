@@ -230,7 +230,9 @@ def train_sam(
             point_list = []
             point_labels_list = []
             flag_train = True
-            print(prompts.shape)
+
+            print(prompts)
+
             for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
                 entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
                 entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
