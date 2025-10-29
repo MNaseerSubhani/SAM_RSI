@@ -221,8 +221,7 @@ def train_sam(
                 bboxes = []
                 point_list = []
                 point_labels_list = []
-                flag_train = True
-
+               
 
                 # print(len(entropy_maps))
                 point_list = []
@@ -246,9 +245,7 @@ def train_sam(
                         point_list.append(point_coords)
                         point_labels_list.append(point_coords_lab)
                         
-                    else:
-
-                        flag_train  = False
+                  
                         
                         
                         # print("No 1s found in mask")
