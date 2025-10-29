@@ -232,7 +232,7 @@ def train_sam(
             flag_train = True
 
 
-            print(len(entropy_maps))
+            # print(len(entropy_maps))
             point_list = []
             point_labels_list = []
             for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
@@ -256,9 +256,11 @@ def train_sam(
                     # (point_coords_lab))
                     point_list.append(point_coords)
                     point_labels_list.append(point_coords_lab)
+                    
                 else:
 
                     flag_train  = False
+                    print(f"skip {len(entropy_maps)}")
                     
                     # print("No 1s found in mask")
             point_ = torch.cat(point_list).squeeze(1)
@@ -269,7 +271,7 @@ def train_sam(
             # del entropy_maps, preds, overlap_map, invert_overlap_map
             torch.cuda.empty_cache()
                 
-            if True and len(entropy_maps) < 70:
+            if True and len(entropy_maps) < 50:
                 bboxes = torch.stack(bboxes)
 
                 with torch.no_grad():
