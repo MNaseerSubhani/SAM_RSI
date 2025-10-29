@@ -201,111 +201,82 @@ def train_sam(
             images_weak, images_strong, bboxes, gt_masks, img_paths= data
             del data
 
-        # for rank, (entropy_scalar, img_path, render) in enumerate(collected, start=1):
-        #     img_name = os.path.splitext(os.path.basename(img_path))[0]
 
-            # ---- Convert and move to device
-            # img_np = render['real']        # numpy HxWx3
-            # images_weak = torch.from_numpy(img_np).permute(2,0,1).float() / 255.0
-            # images_weak = images_weak.unsqueeze(0).to(fabric.device)
-
-            # prompts = render['prompt']
-
-            
-
-            prompts = get_prompts(cfg, bboxes, gt_masks)
-
-            batch_size = images_weak.size(0)
-
-            entropy_maps, preds = process_forward(images_weak, prompts, model)
-            pred_stack = torch.stack(preds, dim=0)
-            pred_binary = (pred_stack > 0.99).float() 
-            overlap_count = pred_binary.sum(dim=0)
-            overlap_map = (overlap_count > 1).float()
-            invert_overlap_map = 1.0 - overlap_map
-
-
-            soft_masks = []
-            bboxes = []
-            point_list = []
-            point_labels_list = []
-            flag_train = True
-
-
-            # print(len(entropy_maps))
-            point_list = []
-            point_labels_list = []
-            for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
-                point_coords = prompts[0][0][i][:].unsqueeze(0)
-                point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
-
-                entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
-                entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
-                pred = (pred[0]>0.99)
-                pred_w_overlap = pred * invert_overlap_map[0]
-
-
-                ys, xs = torch.where(pred_w_overlap > 0.5)
-                if len(xs) > 0 and len(ys) > 0:
-                    x_min, x_max = xs.min().item(), xs.max().item()
-                    y_min, y_max = ys.min().item(), ys.max().item()
-                    bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
-
-                    # point_coords_all = (point_coords)
-                    # point_labels_all = torch.cat(
-                    # (point_coords_lab))
-                    point_list.append(point_coords)
-                    point_labels_list.append(point_coords_lab)
-                    
-                else:
-
-                    flag_train  = False
-                    
-                    
-                    # print("No 1s found in mask")
-            point_ = torch.cat(point_list).squeeze(1)
-            point_labels_ = torch.cat(point_labels_list)
-            new_prompts = [(point_, point_labels_)]
-            # print(new_prompts[0].shape)
-
-            # del entropy_maps, preds, overlap_map, invert_overlap_map
-            
+            for i in range(0, len(gt_masks[0]), 50):
                 
-            if True and len(entropy_maps) < 50:
+                gt_masks_new = gt_masks[0][i:i+10].unsqueeze(0)
+                prompts = get_prompts(cfg, bboxes, gt_masks_new)
+
+                batch_size = images_weak.size(0)
+
+                entropy_maps, preds = process_forward(images_weak, prompts, model)
+                pred_stack = torch.stack(preds, dim=0)
+                pred_binary = (pred_stack > 0.99).float() 
+                overlap_count = pred_binary.sum(dim=0)
+                overlap_map = (overlap_count > 1).float()
+                invert_overlap_map = 1.0 - overlap_map
+
+
+                soft_masks = []
+                bboxes = []
+                point_list = []
+                point_labels_list = []
+                flag_train = True
+
+
+                # print(len(entropy_maps))
+                point_list = []
+                point_labels_list = []
+                for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
+                    point_coords = prompts[0][0][i][:].unsqueeze(0)
+                    point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
+
+                    entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
+                    entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
+                    pred = (pred[0]>0.99)
+                    pred_w_overlap = pred * invert_overlap_map[0]
+
+
+                    ys, xs = torch.where(pred_w_overlap > 0.5)
+                    if len(xs) > 0 and len(ys) > 0:
+                        x_min, x_max = xs.min().item(), xs.max().item()
+                        y_min, y_max = ys.min().item(), ys.max().item()
+                        bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
+
+                        # point_coords_all = (point_coords)
+                        # point_labels_all = torch.cat(
+                        # (point_coords_lab))
+                        point_list.append(point_coords)
+                        point_labels_list.append(point_coords_lab)
+                        
+                    else:
+
+                        flag_train  = False
+                        
+                        
+                        # print("No 1s found in mask")
+                point_ = torch.cat(point_list).squeeze(1)
+                point_labels_ = torch.cat(point_labels_list)
+                new_prompts = [(point_, point_labels_)]
+            
                 bboxes = torch.stack(bboxes)
 
                 with torch.no_grad():
                     _, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
-                
-
-                
-                
-                # soft_masks.append(pred_w_overlap)
-
-
-
-
+  
                 _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
                 del _
 
                 torch.cuda.empty_cache()
 
-            
-            
                 num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
                 loss_focal = torch.tensor(0., device=fabric.device)
                 loss_dice = torch.tensor(0., device=fabric.device)
                 loss_iou = torch.tensor(0., device=fabric.device)
 
-
-        
-
                 for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
                         zip(pred_masks, soft_masks, iou_predictions  )
                     ):
-                    
-        
-
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
                         loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
@@ -316,16 +287,14 @@ def train_sam(
             
                 del  pred_masks, iou_predictions 
                 # loss_dist = loss_dist / num_masks
-                loss_dice = loss_dice / num_masks
-                loss_focal = loss_focal / num_masks
+                loss_dice = loss_dice #/ num_masks
+                loss_focal = loss_focal #/ num_masks
                 torch.cuda.empty_cache()
 
 
-    
-
                 loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
 
-   
+
 
                 fabric.backward(loss_total)
 
@@ -345,8 +314,6 @@ def train_sam(
             
                 del loss_dice, loss_iou, loss_focal
 
-            else:
-                print(f"skip {len(entropy_maps)}")
             if (iter+1) %match_interval==0:
                 fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
                              f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
@@ -356,7 +323,7 @@ def train_sam(
                              f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
                              f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
 
-            if (iter+1)%100 == 0:
+            if (iter+1)%300 == 0:
                 iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
                 del iou
             torch.cuda.empty_cache()
