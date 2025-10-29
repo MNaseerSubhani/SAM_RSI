@@ -232,7 +232,7 @@ def train_sam(
             flag_train = True
 
 
-            
+            print(len(entropy_maps))
             point_list = []
             point_labels_list = []
             for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
