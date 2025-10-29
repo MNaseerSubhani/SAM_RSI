@@ -246,7 +246,7 @@ def train_sam(
 
 
                 ys, xs = torch.where(pred_w_overlap > 0.5)
-                if len(xs) > 0 or len(ys) > 0:
+                if len(xs) > 0 and len(ys) > 0:
                     x_min, x_max = xs.min().item(), xs.max().item()
                     y_min, y_max = ys.min().item(), ys.max().item()
                     bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
@@ -260,7 +260,7 @@ def train_sam(
                 else:
 
                     flag_train  = False
-                    print(f"skip {len(entropy_maps)}")
+                    
                     
                     # print("No 1s found in mask")
             point_ = torch.cat(point_list).squeeze(1)
@@ -269,7 +269,7 @@ def train_sam(
             # print(new_prompts[0].shape)
 
             # del entropy_maps, preds, overlap_map, invert_overlap_map
-            torch.cuda.empty_cache()
+            
                 
             if True and len(entropy_maps) < 50:
                 bboxes = torch.stack(bboxes)
@@ -288,7 +288,7 @@ def train_sam(
                 _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
                 del _
 
-
+                torch.cuda.empty_cache()
 
             
             
@@ -325,7 +325,7 @@ def train_sam(
 
                 loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
 
-                
+   
 
                 fabric.backward(loss_total)
 
@@ -344,6 +344,9 @@ def train_sam(
                 total_losses.update(loss_total.item(), batch_size)
             
                 del loss_dice, loss_iou, loss_focal
+
+            else:
+                print(f"skip {len(entropy_maps)}")
             if (iter+1) %match_interval==0:
                 fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
                              f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
