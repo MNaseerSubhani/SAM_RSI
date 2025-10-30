@@ -190,7 +190,7 @@ def train_sam(
     no_improve_count = 0
     max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
     match_interval = cfg.match_interval
-    eval_interval = int(len(train_dataloader) * 0.1)
+    eval_interval = int(len(train_dataloader) * 1)
 
     # Prepare output dirs
     os.makedirs(os.path.join(cfg.out_dir, "save"), exist_ok=True)
@@ -238,7 +238,7 @@ def train_sam(
                 bboxes = []
                 point_list = []
                 point_labels_list = []
-                for i, ( pred) in enumerate(zip( preds)):
+                for i,  pred in enumerate( preds):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
@@ -325,7 +325,7 @@ def train_sam(
                     f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
                     f"IoU {iou_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                 )
-            if (iter+1) % 30 == 0:
+            if (iter+1) % eval_interval == 0:
                 val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
                 status = ""
