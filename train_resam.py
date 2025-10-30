@@ -336,7 +336,7 @@ def train_sam(
                         embed_feats = F.normalize(embed_feats, p=2, dim=0)
                         embedding_queue.append(embed_feats)
                         loss_match = 0
-                        if len(embedding_queue) > -1:
+                        if len(embedding_queue) > 0:
                             
                             features = torch.stack(embedding_queue, dim=0)
                             eps = 1e-8
