@@ -184,6 +184,8 @@ def train_sam(
     max_iou = 0.
     match_interval = cfg.match_interval
 
+    print(cfg.out_dir)
+
     for epoch in range(1, cfg.num_epochs + 1):
         batch_time = AverageMeter()
         data_time = AverageMeter()
@@ -395,11 +397,11 @@ def main(cfg: Box) -> int:
         full_checkpoint = fabric.load(cfg.model.ckpt)
         model.load_state_dict(full_checkpoint["model"])
         optimizer.load_state_dict(full_checkpoint["optimizer"])
-    print('-'*100)
-    print('\033[92mDirect test on the original SAM.\033[0m') 
-    _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
-    print('-'*100)
-    del _     
+    # print('-'*100)
+    # print('\033[92mDirect test on the original SAM.\033[0m') 
+    # _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    # print('-'*100)
+    # del _     
 
 
     train_sam(cfg, fabric, model, optimizer, scheduler, train_data, val_data, pt_data)
