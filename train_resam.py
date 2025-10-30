@@ -336,7 +336,13 @@ def train_sam(
                         embedding_queue.append(embed_feats)
 
                         features = torch.stack(embedding_queue, dim=0)
-                        cos_sim_matrix = F.cosine_similarity(features.unsqueeze(1), features.unsqueeze(0), dim=2)
+                        eps = 1e-8
+                        cos_sim_matrix = F.cosine_similarity(
+                            features.unsqueeze(1),
+                            features.unsqueeze(0),
+                            dim=2,
+                            eps=eps  # prevent division by zero
+                        )
 # shape: (num_bboxes, num_bboxes)
                         num = features.size(0)
                         device = features.device  # automatically gets cuda:0 if features are on GPU
