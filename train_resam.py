@@ -348,9 +348,10 @@ def train_sam(
                             )
     # shape: (num_bboxes, num_bboxes)
                             num = features.size(0)
+                            print(num)
                             device = features.device  # automatically gets cuda:0 if features are on GPU
                             mask = (1 - torch.eye(num, device=device))
-                            print(mask)
+                            print(cos_sim_matrix.mean())
                             loss_match = ((1 - cos_sim_matrix) * mask).sum() / (num * (num - 1))
                            
 
