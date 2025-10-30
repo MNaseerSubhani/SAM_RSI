@@ -336,7 +336,7 @@ def train_sam(
                         embed_feats = F.normalize(embed_feats, p=2, dim=0)
                         embedding_queue.append(embed_feats)
                         loss_match = 0
-                        if len(embedding_queue) > 0:
+                        if len(embedding_queue) > -1:
                             
                             features = torch.stack(embedding_queue, dim=0)
                             eps = 1e-8
@@ -348,12 +348,11 @@ def train_sam(
                             )
     # shape: (num_bboxes, num_bboxes)
                             num = features.size(0)
-                            print(num)
                             device = features.device  # automatically gets cuda:0 if features are on GPU
                             mask = (1 - torch.eye(num, device=device))
-                            print(cos_sim_matrix.mean())
-                            loss_match = ((1 - cos_sim_matrix) * mask).sum() / (num * (num - 1))
-                           
+
+                            loss_match = (1 - cos_sim_matrix.mean()) 
+                            
 
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
