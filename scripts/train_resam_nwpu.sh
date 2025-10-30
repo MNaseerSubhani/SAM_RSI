@@ -12,3 +12,6 @@ for output_dir in "${output_dirs[@]}"; do
         CUDA_VISIBLE_DEVICES=0 python train_resam.py --cfg "$cfg_file" --prompt "$prompt" --num_points "$num_points" --out_dir "$out_dir"  --load_type "$load_type"
     done
 done
+
+
+

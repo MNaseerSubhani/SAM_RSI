@@ -200,14 +200,14 @@ def train_sam(
         for iter, data in enumerate(train_dataloader):
 
             data_time.update(time.time() - end)
-            images_weak, images_strong, bboxes, gt_masks, img_paths= data
+            images_weak, images_strong, bboxes_gt, gt_masks, img_paths= data
             del data
 
             slice_step = 50
-            for i in range(0, len(gt_masks[0]), slice_step):
+            for j in range(0, len(gt_masks[0]), slice_step):
                 
-                gt_masks_new = gt_masks[0][i:i+slice_step].unsqueeze(0)
-                prompts = get_prompts(cfg, bboxes, gt_masks_new)
+                gt_masks_new = gt_masks[0][j:j+slice_step].unsqueeze(0)
+                prompts = get_prompts(cfg, bboxes_gt, gt_masks_new)
 
                 batch_size = images_weak.size(0)
 
@@ -232,8 +232,8 @@ def train_sam(
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
-                    entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
-                    entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
+                    # entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
+                    # entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
                     pred = (pred[0]>0.99)
                     pred_w_overlap = pred * invert_overlap_map[0]
 
@@ -263,7 +263,7 @@ def train_sam(
                 _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
                 del _
 
-                torch.cuda.empty_cache()
+         
 
                 num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
                 loss_focal = torch.tensor(0., device=fabric.device)
@@ -285,7 +285,7 @@ def train_sam(
                 # loss_dist = loss_dist / num_masks
                 loss_dice = loss_dice #/ num_masks
                 loss_focal = loss_focal #/ num_masks
-                torch.cuda.empty_cache()
+       
 
 
                 loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
@@ -310,7 +310,7 @@ def train_sam(
             
                 del loss_dice, loss_iou, loss_focal
 
-            if (iter+1) %match_interval==0:
+            if (iter+1) % match_interval==0:
                 fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
                              f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
                              f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
@@ -319,10 +319,10 @@ def train_sam(
                              f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
                              f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
 
-            if (iter+1)%eval_interval == 0:
+            if (iter+1) % eval_interval == 0:
                 iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
                 del iou
-            torch.cuda.empty_cache()
+        
             
         # if epoch % cfg.eval_interval == 0:
         #     iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
@@ -410,11 +410,21 @@ def main(cfg: Box) -> int:
 
 
 
-###########SAM2 all things
 
-
-
-
+###############################################################################
+# 🧠 SAM2 Integration
+# ---------------------------------------------------------------------------
+# This section handles all SAM2-related components including:
+#   • Model prediction and mask generation
+#   • Prompt handling (points, boxes, embeddings, etc.)
+#   • Loss computation (focal, dice, entropy, IoU)
+#   • Device management (ensuring tensors stay on the same GPU)
+#   • Training and validation forward passes
+#
+# NOTE:
+#   Ensure all tensors (pred_mask, soft_mask, etc.) are moved to the same device
+#   before loss calculation to avoid cuda/cpu mismatches.
+###############################################################################
 
 
 
@@ -447,20 +457,13 @@ def sam2forward(img_tensor, prompts ,predictor):
             logits_full = F.interpolate(torch.tensor(logits).unsqueeze(0), size=(1024, 1024), mode='bilinear', align_corners=False)
             soft_mask_full = torch.sigmoid(logits_full[0][0])
 
-            # print(mask_tuple[0].shape)
-
             pred_mask = torch.sigmoid(soft_mask_full)
-            # mask_tuple is length 1 since multimask_output=False
-            # mask_np = soft_mask[0]
-            # mask_tensor = torch.from_numpy(mask_np).float().to(img_tensor[0].device)
+
             pred_masks.append(pred_mask)
             
             entropy_map = entropy_map_calculate(pred_mask.unsqueeze(0))
             entropy_maps.append(entropy_map)
-        # pred_masks = torch.stack(pred_masks, dim=0)
-        # pred_masks = pred_masks.unsqueeze(0)
-        
-
+    
     return entropy_maps, pred_masks
 
 
@@ -476,20 +479,8 @@ def sam2forward_bbox(img_tensor, prompts_boxes ,predictor):
                 multimask_output=False           # only 1 mask
             )
 
-            # logits_full = F.interpolate(torch.tensor(logits).unsqueeze(0), size=(1024, 1024), mode='bilinear', align_corners=False)
-            # soft_mask_full = torch.sigmoid(logits_full[0][0])
-
-            # # print(mask_tuple[0].shape)
-
-            # pred_mask = torch.sigmoid(soft_mask_full)
-            # mask_tuple is length 1 since multimask_output=False
-            # mask_np = soft_mask[0]
-            # mask_tensor = torch.from_numpy(mask_np).float().to(img_tensor[0].device)
             pred_masks.append(mask_tuple[0])
-    
-        # pred_masks = torch.stack(pred_masks, dim=0)
-        # pred_masks = pred_masks.unsqueeze(0)
-        
+
 
     return  pred_masks
         
@@ -552,8 +543,6 @@ def pass_for_training(img_tensor, prompts, predictor):
 
     pred_masks = torch.stack(pred_masks)
     iou_predictions = torch.stack(iou_predictions)
-
-
 
     return pred_masks, iou_predictions
 
@@ -799,8 +788,6 @@ def main2(cfg: Box) -> int:
 
 
 
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')
     parser.add_argument('--cfg', help='train config file path')
@@ -822,7 +809,6 @@ if __name__ == "__main__":
     # transfer the args to a dict
     args_dict = vars(args)
     cfg.merge_update(args_dict)
-
     print(cfg.model.backend)
 
     if cfg.model.backend == 'sam':

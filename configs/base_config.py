@@ -27,8 +27,8 @@ base_config = {
         "jpeg_compression",
     ],
     "model": {
-        "backend": "sam2",  # one of: sam, sam2
-        "type": "sam2_hiera_b+",   # for sam: vit_b  for sam2:  sam2.1_hiera_b+
+        "backend": "sam",  # one of: sam, sam2
+        "type": "vit_b",   # for sam: vit_b  for sam2:  sam2.1_hiera_b+
         "checkpoint": "./pretrain/",
         "ckpt": "",
         # SAM2-specific optional config path and hydra overrides

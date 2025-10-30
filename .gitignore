@@ -73,6 +73,7 @@ src
 
 # PyBuilder
 target/
+outputs/
 
 # Jupyter Notebook
 .ipynb_checkpoints
