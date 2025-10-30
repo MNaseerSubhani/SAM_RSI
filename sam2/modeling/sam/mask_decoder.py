@@ -48,6 +48,7 @@ class MaskDecoder(nn.Module):
             used to predict mask quality
         """
         super().__init__()
+     
         self.transformer_dim = transformer_dim
         self.transformer = transformer
 
@@ -73,7 +74,7 @@ class MaskDecoder(nn.Module):
             ),
             activation(),
         )
-        self.use_high_res_features = use_high_res_features
+        self.use_high_res_features = False
         if use_high_res_features:
             self.conv_s0 = nn.Conv2d(
                 transformer_dim, transformer_dim // 8, kernel_size=1, stride=1
@@ -117,6 +118,7 @@ class MaskDecoder(nn.Module):
         repeat_image: bool,
         high_res_features: Optional[List[torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+    
         """
         Predict masks given image and prompt embeddings.
 

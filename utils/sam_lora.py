@@ -207,3 +207,10 @@ class LoRA_Sam(LoRA):
         # self.sam = sam_model
         self.lora_vit = sam_model
 
+
+
+
+
+
+
+

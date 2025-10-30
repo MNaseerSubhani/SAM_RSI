@@ -8,6 +8,7 @@ import logging
 import os
 
 import torch
+import hydra
 from hydra import compose
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
@@ -30,6 +31,7 @@ if os.path.isdir(os.path.join(sam2.__path__[0], "sam2")):
         "in `sam2/sam2`). Please run Python from another directory (e.g. from the repo dir "
         "rather than its parent dir, or from your home directory) after installing SAM 2."
     )
+from hydra.core.global_hydra import GlobalHydra
 
 
 HF_MODEL_ID_TO_FILENAMES = {
@@ -86,7 +88,8 @@ def build_sam2(
             "++model.sam_mask_decoder_extra_args.dynamic_multimask_stability_delta=0.05",
             "++model.sam_mask_decoder_extra_args.dynamic_multimask_stability_thresh=0.98",
         ]
-    # Read config and init model
+    
+    print(config_file)
     cfg = compose(config_name=config_file, overrides=hydra_overrides_extra)
     OmegaConf.resolve(cfg)
     model = instantiate(cfg.model, _recursive_=True)

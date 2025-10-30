@@ -144,6 +144,69 @@ def validate(fabric: L.Fabric, cfg: Box, model: Model, val_dataloader: DataLoade
     return ious.avg, f1_scores.avg
 
 
+from sam2.sam2_image_predictor import SAM2ImagePredictor
+def validate_sam2(fabric: L.Fabric, cfg: Box, model: Model, val_dataloader: DataLoader, name: str, epoch: int = 0):
+    model.eval()
+    ious = AverageMeter()
+    f1_scores = AverageMeter()
+    recall = AverageMeter()
+    precision = AverageMeter()
+
+    # create predictor
+    predictor = SAM2ImagePredictor(model)
+    with torch.no_grad():
+
+        for iter, data in enumerate(tqdm(val_dataloader, desc='Validation', ncols=100)):
+            images, bboxes, gt_masks, img_paths = data
+            num_images = images.size(0)
+            prompts = get_prompts(cfg, bboxes, gt_masks)
+
+        
+            images = images[0].permute(1, 2, 0).cpu().numpy()
+            
+            # image_embeddings = model.image_encoder(images)
+            predictor.set_image(images)
+
+            pred_masks = []
+            for i in range(prompts[0][0].shape[0]):
+                mask_tuple, scores, logits = predictor.predict(
+                    point_coords=prompts[0][0][i].unsqueeze(0),      # single point
+                    point_labels=prompts[0][1][i].unsqueeze(0),      
+                    multimask_output=False           # only 1 mask
+                )
+                # mask_tuple is length 1 since multimask_output=False
+                mask_np = mask_tuple[0]
+                mask_tensor = torch.from_numpy(mask_np > 0).float().to(gt_masks[0].device)
+                pred_masks.append(mask_tensor)
+
+            pred_masks = torch.stack(pred_masks, dim=0)
+            pred_masks = pred_masks.unsqueeze(0)
+            for pred_mask, gt_mask in zip(pred_masks, gt_masks):
+                batch_stats = smp.metrics.get_stats(
+                    pred_mask,
+                    gt_mask.int(),
+                    mode='binary',
+                    threshold=0.5,
+                )
+                batch_recall = smp.metrics.recall(*batch_stats, reduction="micro-imagewise")
+                batch_precision = smp.metrics.precision(*batch_stats, reduction="micro-imagewise")
+                batch_iou = smp.metrics.iou_score(*batch_stats, reduction="micro-imagewise")
+                batch_f1 = smp.metrics.f1_score(*batch_stats, reduction="micro-imagewise")
+                ious.update(batch_iou, num_images)
+                f1_scores.update(batch_f1, num_images)
+                recall.update(batch_recall, num_images)
+                precision.update(batch_precision, num_images)
+
+            torch.cuda.empty_cache()
+
+    fabric.print(
+        f'Val: [{epoch}] - [{iter+1}/{len(val_dataloader)}]: IoU: [{ious.avg:.4f}] -- Recall: [{recall.avg:.4f}] -- Precision [{precision.avg:.4f}] -- F1: [{f1_scores.avg:.4f}]'
+    )
+    csv_dict = {"Prompt": cfg.prompt, "IoU": f"{ious.avg:.4f}","Recall": f"{recall.avg:.4f}", "Precision": f"{precision.avg:.4f}", "F1": f"{f1_scores.avg:.4f}", "epoch": epoch}
+
+    if fabric.global_rank == 0:
+        write_csv(os.path.join(cfg.out_dir, "metrics.csv"), csv_dict, csv_head=cfg.csv_keys)
+    return ious.avg, f1_scores.avg
 
 
         

@@ -21,7 +21,7 @@ from box import Box
 from datasets import call_load_dataset
 from utils.model import Model
 from utils.losses import DiceLoss, FocalLoss, Matching_Loss
-from utils.eval_utils import AverageMeter, validate, get_prompts, calc_iou
+from utils.eval_utils import AverageMeter, validate, get_prompts, calc_iou, validate_sam2
 from utils.tools import copy_model, create_csv, reduce_instances
 from utils.utils import *
 # from utils.finch import FINCH
@@ -195,16 +195,18 @@ def train_sam(
         end = time.time()
         num_iter = len(train_dataloader)
 
+        eval_interval = int(len(train_dataloader) * 0.1) 
+
         for iter, data in enumerate(train_dataloader):
 
             data_time.update(time.time() - end)
             images_weak, images_strong, bboxes, gt_masks, img_paths= data
             del data
 
-
-            for i in range(0, len(gt_masks[0]), 50):
+            slice_step = 50
+            for i in range(0, len(gt_masks[0]), slice_step):
                 
-                gt_masks_new = gt_masks[0][i:i+10].unsqueeze(0)
+                gt_masks_new = gt_masks[0][i:i+slice_step].unsqueeze(0)
                 prompts = get_prompts(cfg, bboxes, gt_masks_new)
 
                 batch_size = images_weak.size(0)
@@ -317,7 +319,7 @@ def train_sam(
                              f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
                              f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
 
-            if (iter+1)%300 == 0:
+            if (iter+1)%eval_interval == 0:
                 iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
                 del iou
             torch.cuda.empty_cache()
@@ -346,7 +348,9 @@ def configure_opt(cfg: Box, model: Model):
         else:
             return 1 / (cfg.opt.decay_factor**2)
 
-    optimizer = torch.optim.Adam(model.model.parameters(), lr=cfg.opt.learning_rate, weight_decay=cfg.opt.weight_decay)
+    # optimize only trainable params (e.g., LoRA)
+    trainable_params = (p for p in model.model.parameters() if p.requires_grad)
+    optimizer = torch.optim.Adam(trainable_params, lr=cfg.opt.learning_rate, weight_decay=cfg.opt.weight_decay)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
     return optimizer, scheduler
@@ -391,22 +395,410 @@ def main(cfg: Box) -> int:
         full_checkpoint = fabric.load(cfg.model.ckpt)
         model.load_state_dict(full_checkpoint["model"])
         optimizer.load_state_dict(full_checkpoint["optimizer"])
+    print('-'*100)
+    print('\033[92mDirect test on the original SAM.\033[0m') 
+    _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    print('-'*100)
+    del _     
+
+
+    train_sam(cfg, fabric, model, optimizer, scheduler, train_data, val_data, pt_data)
+
+    del model, train_data, val_data
+
+
+
+
+
+###########SAM2 all things
+
+
+
+
+
+
+
+
+
+
+from sam2.sam2_image_predictor import SAM2ImagePredictor
+from sam2.build_sam import build_sam2
+from peft import LoraConfig, get_peft_model
+
+model_cfg = "./configs/sam2/sam2_hiera_b+.yaml"
+checkpoint = "./pretrain/sam2_hiera_base_plus.pt"
+
+
+
+def sam2forward(img_tensor, prompts ,predictor):
+    
+    images = img_tensor[0].permute(1, 2, 0).cpu().numpy()
+    with torch.no_grad():
+        predictor.set_image(images)
+        entropy_maps = []
+        pred_masks = []
+        for i in range(prompts[0][0].shape[0]):
+            mask_tuple, scores, logits = predictor.predict(
+                point_coords=prompts[0][0][i].unsqueeze(0),      # single point
+                point_labels=prompts[0][1][i].unsqueeze(0),      
+                multimask_output=False           # only 1 mask
+            )
+
+            logits_full = F.interpolate(torch.tensor(logits).unsqueeze(0), size=(1024, 1024), mode='bilinear', align_corners=False)
+            soft_mask_full = torch.sigmoid(logits_full[0][0])
+
+            # print(mask_tuple[0].shape)
+
+            pred_mask = torch.sigmoid(soft_mask_full)
+            # mask_tuple is length 1 since multimask_output=False
+            # mask_np = soft_mask[0]
+            # mask_tensor = torch.from_numpy(mask_np).float().to(img_tensor[0].device)
+            pred_masks.append(pred_mask)
+            
+            entropy_map = entropy_map_calculate(pred_mask.unsqueeze(0))
+            entropy_maps.append(entropy_map)
+        # pred_masks = torch.stack(pred_masks, dim=0)
+        # pred_masks = pred_masks.unsqueeze(0)
+        
+
+    return entropy_maps, pred_masks
+
+
+def sam2forward_bbox(img_tensor, prompts_boxes ,predictor):
+    
+    images = img_tensor[0].permute(1, 2, 0).cpu().numpy()
+    with torch.no_grad():
+        predictor.set_image(images)
+        pred_masks = []
+        for i in range(prompts_boxes.shape[0]):
+            mask_tuple, scores, logits = predictor.predict(
+                box=prompts_boxes[i].unsqueeze(0),      # single point
+                multimask_output=False           # only 1 mask
+            )
+
+            # logits_full = F.interpolate(torch.tensor(logits).unsqueeze(0), size=(1024, 1024), mode='bilinear', align_corners=False)
+            # soft_mask_full = torch.sigmoid(logits_full[0][0])
+
+            # # print(mask_tuple[0].shape)
+
+            # pred_mask = torch.sigmoid(soft_mask_full)
+            # mask_tuple is length 1 since multimask_output=False
+            # mask_np = soft_mask[0]
+            # mask_tensor = torch.from_numpy(mask_np).float().to(img_tensor[0].device)
+            pred_masks.append(mask_tuple[0])
+    
+        # pred_masks = torch.stack(pred_masks, dim=0)
+        # pred_masks = pred_masks.unsqueeze(0)
+        
+
+    return  pred_masks
+        
+
+
+# #     return pred_masks, Iou_prediciton
+def pass_for_training(img_tensor, prompts, predictor):
+    """
+    Differentiable SAM2 forward pass for training with point prompts.
+    """
+
+    device = img_tensor.device
+    image = img_tensor[0].to(device)
+
+    # 1️⃣ Encode image (keep gradients)
+    image_dict = predictor.model.image_encoder(image.unsqueeze(0))
+    image_embedding = image_dict["vision_features"]
+    image_pe = predictor.model.sam_prompt_encoder.get_dense_pe().to(device)
+
+    mask_decoder = predictor.model.sam_mask_decoder
+
+    
+
+    # 3️⃣ Prepare prompts
+    point_coords = prompts[0][0].to(device)
+    point_labels = prompts[0][1].to(device)
+
+    pred_masks = []
+    iou_predictions = []
+
+    # 4️⃣ Loop over each point
+    for i in range(point_coords.shape[0]):
+        single_point = point_coords[i].unsqueeze(0)
+        single_label = point_labels[i].unsqueeze(0)
+
+        sparse_embeddings, dense_embeddings = predictor.model.sam_prompt_encoder(
+            points=(single_point, single_label),
+            boxes=None,
+            masks=None
+        )
+
+        # 5️⃣ Decode masks
+     
+        mask_logits, iou_pred, mask_tokens_out, object_score_logit = predictor.model.sam_mask_decoder(
+            image_embeddings=image_embedding,
+            image_pe=predictor.model.sam_prompt_encoder.get_dense_pe(),
+            sparse_prompt_embeddings=sparse_embeddings,
+            dense_prompt_embeddings=dense_embeddings,
+            multimask_output=False,   # single mask output
+            repeat_image=False,
+        )
+
+        # 6️⃣ Normalize masks
+        mask_logits = F.interpolate(mask_logits, size=(1024, 1024),
+                                    mode="bilinear", align_corners=False)
+        mask_probs = torch.sigmoid(mask_logits[0, 0])
+
+        pred_masks.append(mask_probs)
+        iou_predictions.append(iou_pred)
+
+    pred_masks = torch.stack(pred_masks)
+    iou_predictions = torch.stack(iou_predictions)
+
+
+
+    return pred_masks, iou_predictions
+
+
+
+
+
+def train_sam2(
+    cfg: Box,
+    fabric: L.Fabric,
+    model: Model,
+    optimizer: _FabricOptimizer,
+    scheduler: _FabricOptimizer,
+    train_dataloader: DataLoader,
+    val_dataloader: DataLoader,
+    target_pts,
+):
+
+    focal_loss = FocalLoss()
+    dice_loss = DiceLoss()
+    max_iou = 0.
+    match_interval = cfg.match_interval
+
+    predictor = SAM2ImagePredictor(model)
+
+    for epoch in range(1, cfg.num_epochs + 1):
+        batch_time = AverageMeter()
+        data_time = AverageMeter()
+        focal_losses = AverageMeter()
+        dice_losses = AverageMeter()
+        iou_losses = AverageMeter()
+        total_losses = AverageMeter()
+        match_losses = AverageMeter()
+        end = time.time()
+        num_iter = len(train_dataloader)
+
+        eval_interval = int(len(train_dataloader) * 0.1) 
+
+        for iter, data in enumerate(train_dataloader):
+
+            data_time.update(time.time() - end)
+            images_weak, images_strong, bboxes, gt_masks, img_paths= data
+            del data
+
+            slice_step = 50
+            for i in range(0, len(gt_masks[0]), slice_step):
+                
+                gt_masks_new = gt_masks[0][i:i+slice_step].unsqueeze(0)
+                prompts = get_prompts(cfg, bboxes, gt_masks_new)
+
+                batch_size = images_weak.size(0)
+
+                entropy_maps, preds = sam2forward(images_weak, prompts, predictor)
+                pred_stack = torch.stack(preds, dim=0)
+                pred_binary = (pred_stack > 0.5).float()
+                overlap_count = pred_binary.sum(dim=0) 
+                overlap_map = (overlap_count > 1).float()
+                invert_overlap_map = 1.0 - overlap_map
+
+                
+
+                soft_masks = []
+                bboxes = []
+                point_list = []
+                point_labels_list = []
+                for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
+                    point_coords = prompts[0][0][i][:].unsqueeze(0)
+                    point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
+
+                    entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
+                    
+                    pred = (pred>0.5)
+                    pred_w_overlap = pred * invert_overlap_map
+
+                    ys, xs = torch.where(pred_w_overlap > 0.5)
+                    if len(xs) > 0 and len(ys) > 0:
+                        x_min, x_max = xs.min().item(), xs.max().item()
+                        y_min, y_max = ys.min().item(), ys.max().item()
+                        bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
+
+                        point_list.append(point_coords)
+                        point_labels_list.append(point_coords_lab)
+                       
+                if len(point_list) !=0:
+                    point_ = torch.cat(point_list).squeeze(1)
+                    point_labels_ = torch.cat(point_labels_list)
+                    new_prompts = [(point_, point_labels_)]
+                
+                    bboxes = torch.stack(bboxes)
+
+                    soft_masks = sam2forward_bbox(images_weak, bboxes, predictor)
+
+                    pred_masks , iou_predictions = pass_for_training(images_strong, new_prompts,predictor )
+                
+
+                    torch.cuda.empty_cache()
+
+                    num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
+                    loss_focal = torch.tensor(0., device=fabric.device)
+                    loss_dice = torch.tensor(0., device=fabric.device)
+                    loss_iou = torch.tensor(0., device=fabric.device)
+
+                    for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
+                            zip(pred_masks, soft_masks, iou_predictions  )
+                        ):
+                            
+                            soft_mask = (torch.tensor(soft_mask) > 0.).float().unsqueeze(0)
+                            pred_mask = pred_mask.unsqueeze(0).to(soft_mask.device)
+                            iou_prediction = iou_prediction.to(soft_mask.device)
+                        
+                            
+                            # Apply entropy mask to losses
+                            loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
+                            loss_dice += dice_loss(pred_mask, soft_mask)   #, entropy_mask=entropy_mask
+                            batch_iou = calc_iou(pred_mask, soft_mask)
+                            loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
+
+                
+                    del  pred_masks, iou_predictions 
+                    # loss_dist = loss_dist / num_masks
+                    loss_dice = loss_dice #/ num_masks
+                    loss_focal = loss_focal #/ num_masks
+                    torch.cuda.empty_cache()
+
+
+                    loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
+
+
+
+                    fabric.backward(loss_total)
+
+                    optimizer.step()
+                    scheduler.step()
+                    optimizer.zero_grad()
+                    torch.cuda.empty_cache()
+                    del  prompts, soft_masks
+
+                    batch_time.update(time.time() - end)
+                    end = time.time()
+
+                    focal_losses.update(loss_focal.item(), batch_size)
+                    dice_losses.update(loss_dice.item(), batch_size)
+                    iou_losses.update(loss_iou.item(), batch_size)
+                    total_losses.update(loss_total.item(), batch_size)
+                
+                    del loss_dice, loss_iou, loss_focal
+
+            if (iter+1) %int(eval_interval/10)==0:
+                fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
+                             f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
+                             f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
+                             f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
+                             f' | Dice Loss [{dice_losses.val:.4f} ({dice_losses.avg:.4f})]'
+                             f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
+                             f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
+
+            if (iter+1)%eval_interval == 0:
+                iou, _, = validate_sam2(fabric, cfg, model, val_dataloader, name=cfg.name, epoch=0)
+                del iou
+            torch.cuda.empty_cache()
+            
+        # if epoch % cfg.eval_interval == 0:
+        #     iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+        #     # if iou > max_iou:
+        #     #     state = {"model": model, "optimizer": optimizer}
+        #     #     fabric.save(os.path.join(cfg.out_dir, "save", "best-ckpt.pth"), state)
+        #     #     max_iou = iou
+        #     del iou  
+
+def configure_opt2(cfg: Box, model: Model):
+
+    def lr_lambda(step):
+        if step < cfg.opt.warmup_steps:
+            return step / cfg.opt.warmup_steps
+        elif step < cfg.opt.steps[0]:
+            return 1.0
+        elif step < cfg.opt.steps[1]:
+            return 1 / cfg.opt.decay_factor
+        else:
+            return 1 / (cfg.opt.decay_factor**2)
+
+    # optimize only trainable params (e.g., LoRA)
+    trainable_params = (p for p in model.parameters() if p.requires_grad)
+    optimizer = torch.optim.Adam(trainable_params, lr=cfg.opt.learning_rate, weight_decay=cfg.opt.weight_decay)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    return optimizer, scheduler
+
+
+def main2(cfg: Box) -> int:
+    gpu_ids = [str(i) for i in range(torch.cuda.device_count())]
+    num_devices = len(gpu_ids)
+    fabric = L.Fabric(accelerator="auto",
+                      devices=num_devices,
+                      strategy="auto",
+                      loggers=[TensorBoardLogger(cfg.out_dir)])
+    fabric.launch()
+    fabric.seed_everything(1337 + fabric.global_rank)
+
+    if fabric.global_rank == 0:
+        os.makedirs(os.path.join(cfg.out_dir, "save"), exist_ok=True)
+        create_csv(os.path.join(cfg.out_dir, "metrics.csv"), csv_head=cfg.csv_keys)
+
+    with fabric.device:
+        model = build_sam2(model_cfg, checkpoint, mode='train')
+    encoder = model.image_encoder
+    lora_config = LoraConfig(
+        r=4,                   # rank
+        lora_alpha=16,
+        target_modules=["qkv"],  # Hiera merges q,k,v in one linear layer
+        lora_dropout=0.05,
+        bias="none",
+    )
+    model = get_peft_model(model, lora_config)
+
+    # model.image_encoder = encoder
+
+
+    load_datasets = call_load_dataset(cfg)
+    train_data, val_data, pt_data = load_datasets(cfg, img_size=1024, return_pt = True)
+    train_data = fabric._setup_dataloader(train_data)
+    val_data = fabric._setup_dataloader(val_data)
+    pt_data = fabric._setup_dataloader(pt_data)
+    optimizer, scheduler = configure_opt2(cfg, model)
+    model, optimizer = fabric.setup(model, optimizer)
+
+    if cfg.resume and cfg.model.ckpt is not None:
+        full_checkpoint = fabric.load(checkpoint)
+        model.load_state_dict(full_checkpoint["model"])
+        optimizer.load_state_dict(full_checkpoint["optimizer"])
+
+
     # print('-'*100)
     # print('\033[92mDirect test on the original SAM.\033[0m') 
-    # _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    # _, _, = validate_sam2(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
     # print('-'*100)
     # del _     
 
 
-
-    # save_uncertanity_mask(cfg, model, pt_data)
-    
-
-#     target_pts = offline_prototypes_generation(cfg, model, pt_data)
-    
-    train_sam(cfg, fabric, model, optimizer, scheduler, train_data, val_data, pt_data)
+    train_sam2(cfg, fabric, model, optimizer, scheduler, train_data, val_data, pt_data)
 
     del model, train_data, val_data
+
+
+
 
 
 def parse_args():
@@ -431,5 +823,10 @@ if __name__ == "__main__":
     args_dict = vars(args)
     cfg.merge_update(args_dict)
 
-    main(cfg)
+    print(cfg.model.backend)
+
+    if cfg.model.backend == 'sam':
+        main(cfg)
+    elif cfg.model.backend == 'sam2':
+        main2(cfg)
     torch.cuda.empty_cache()

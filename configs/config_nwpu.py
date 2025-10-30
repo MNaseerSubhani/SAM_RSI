@@ -23,9 +23,9 @@ config = {
     "name": "base",
     "corrupt": None,
     "visual": False,
-    "model": {
-        "type": "vit_b", 
-        },
+    # "model": {
+    #     "type": "vit_b", 
+    #     },
     "opt": {
         "learning_rate": 5e-4,
         "weight_decay": 1e-4,
