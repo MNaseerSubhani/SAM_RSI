@@ -333,10 +333,11 @@ def train_sam(
                         zip(pred_masks, soft_masks, iou_predictions, bboxes  )
                     ):  
                         embed_feats = get_bbox_feature( embeddings, bbox)
+                        embed_feats = F.normalize(embed_feats, p=2, dim=0)
                         embedding_queue.append(embed_feats)
                         loss_match = 0
-                        if len(embedding_queue) > 0:
-
+                        if len(embedding_queue) > -1:
+                            
                             features = torch.stack(embedding_queue, dim=0)
                             eps = 1e-8
                             cos_sim_matrix = F.cosine_similarity(
@@ -349,6 +350,7 @@ def train_sam(
                             num = features.size(0)
                             device = features.device  # automatically gets cuda:0 if features are on GPU
                             mask = (1 - torch.eye(num, device=device))
+                            print(mask)
                             loss_match = ((1 - cos_sim_matrix) * mask).sum() / (num * (num - 1))
                            
 
