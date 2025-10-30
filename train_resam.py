@@ -24,7 +24,11 @@ from utils.losses import DiceLoss, FocalLoss, Matching_Loss
 from utils.eval_utils import AverageMeter, validate, get_prompts, calc_iou, validate_sam2
 from utils.tools import copy_model, create_csv, reduce_instances
 from utils.utils import *
-# from utils.finch import FINCH
+
+import  csv, copy
+import torch
+import torch.nn.functional as F
+from collections import deque
 
 # vis = False
 
@@ -178,13 +182,27 @@ def train_sam(
     val_dataloader: DataLoader,
     target_pts,
 ):
-    # collected = sort_entropy_(model, target_pts)
+
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
-    max_iou = 0.
+    best_iou = 0.0
+    best_state = copy.deepcopy(model.state_dict())
+    no_improve_count = 0
+    max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
     match_interval = cfg.match_interval
+    eval_interval = int(len(train_dataloader) * 0.1)
 
-    print(cfg.out_dir)
+    # Prepare output dirs
+    os.makedirs(os.path.join(cfg.out_dir, "save"), exist_ok=True)
+    csv_path = os.path.join(cfg.out_dir, "training_log.csv")
+
+    # Initialize CSV
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Epoch", "Iteration", "Val_IoU", "Best_IoU", "Status"])
+
+    fabric.print(f"Training with rollback enabled. Logging to: {csv_path}")
+
 
     for epoch in range(1, cfg.num_epochs + 1):
         batch_time = AverageMeter()
@@ -193,11 +211,7 @@ def train_sam(
         dice_losses = AverageMeter()
         iou_losses = AverageMeter()
         total_losses = AverageMeter()
-        match_losses = AverageMeter()
         end = time.time()
-        num_iter = len(train_dataloader)
-
-        eval_interval = int(len(train_dataloader) * 0.1) 
 
         for iter, data in enumerate(train_dataloader):
 
@@ -213,7 +227,7 @@ def train_sam(
 
                 batch_size = images_weak.size(0)
 
-                entropy_maps, preds = process_forward(images_weak, prompts, model)
+                __, preds = process_forward(images_weak, prompts, model)
                 pred_stack = torch.stack(preds, dim=0)
                 pred_binary = (pred_stack > 0.99).float() 
                 overlap_count = pred_binary.sum(dim=0)
@@ -221,21 +235,13 @@ def train_sam(
                 invert_overlap_map = 1.0 - overlap_map
 
 
-                soft_masks = []
                 bboxes = []
                 point_list = []
                 point_labels_list = []
-               
-
-                # print(len(entropy_maps))
-                point_list = []
-                point_labels_list = []
-                for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
+                for i, ( pred) in enumerate(zip( preds)):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
-                    # entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
-                    # entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
                     pred = (pred[0]>0.99)
                     pred_w_overlap = pred * invert_overlap_map[0]
 
@@ -249,7 +255,8 @@ def train_sam(
                         point_list.append(point_coords)
                         point_labels_list.append(point_coords_lab)
                         
-                  
+                if len(bboxes) == 0:
+                    continue  # skip if no valid region
                         
                         
                         # print("No 1s found in mask")
@@ -313,26 +320,39 @@ def train_sam(
                 del loss_dice, loss_iou, loss_focal
 
             if (iter+1) % match_interval==0:
-                fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
-                             f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
-                             f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
-                             f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
-                             f' | Dice Loss [{dice_losses.val:.4f} ({dice_losses.avg:.4f})]'
-                             f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
-                             f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
+                fabric.print(
+                    f"Epoch [{epoch}] Iter [{iter + 1}/{len(train_dataloader)}] "
+                    f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
+                    f"IoU {iou_losses.avg:.4f} | Total {total_losses.avg:.4f}"
+                )
+            if (iter+1) % 30 == 0:
+                val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
-            if (iter+1) % eval_interval == 0:
-                iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-                del iou
+                status = ""
+                if val_iou > best_iou:
+                    best_iou = val_iou
+                    best_state = copy.deepcopy(model.state_dict())
+                    torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
+                    status = "Improved → Model Saved"
+                    no_improve_count = 0
+                else:
+                    model.load_state_dict(best_state)
+                    no_improve_count += 1
+                    status = f"Rollback ({no_improve_count})"
+
+                # Write log entry
+                with open(csv_path, "a", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([epoch, iter + 1, val_iou, best_iou, status])
+
+                fabric.print(f"Validation IoU={val_iou:.4f} | Best={best_iou:.4f} | {status}")
+
+                # Stop if model fails to stabilize
+                if no_improve_count >= max_patience:
+                    fabric.print(f"Training stopped early after {no_improve_count} failed rollbacks.")
+                    return
         
-            
-        # if epoch % cfg.eval_interval == 0:
-        #     iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-        #     # if iou > max_iou:
-        #     #     state = {"model": model, "optimizer": optimizer}
-        #     #     fabric.save(os.path.join(cfg.out_dir, "save", "best-ckpt.pth"), state)
-        #     #     max_iou = iou
-        #     del iou   
+
 
 
 
