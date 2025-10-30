@@ -455,7 +455,7 @@ def main(cfg: Box) -> int:
 
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from sam2.build_sam import build_sam2
-from peft import LoraConfig, get_peft_model
+# from peft import LoraConfig, get_peft_model
 
 model_cfg = "./configs/sam2/sam2_hiera_b+.yaml"
 checkpoint = "./pretrain/sam2_hiera_base_plus.pt"
