@@ -172,6 +172,50 @@ def prompt_calibration(cfg, entrop_map, prompts, point_status):
     return new_prompts
 
 
+def get_bbox_feature(embedding_map, bbox, stride=16, pooling='avg'):
+    """
+    Extract a feature vector from an embedding map given a bounding box.
+    
+    Args:
+        embedding_map (torch.Tensor): Shape (C, H_feat, W_feat) or (B, C, H_feat, W_feat)
+        bbox (list or torch.Tensor): [x1, y1, x2, y2] in original image coordinates
+        stride (int): Downscaling factor between image and feature map
+        pooling (str): 'avg' or 'max' pooling inside the bbox region
+        
+    Returns:
+        torch.Tensor: Feature vector of shape (C,)
+    """
+    # If batch dimension exists, assume batch size 1
+    if embedding_map.dim() == 4:
+        embedding_map = embedding_map[0]
+
+    C, H_feat, W_feat = embedding_map.shape
+    x1, y1, x2, y2 = bbox
+
+    # Map bbox to feature map coordinates
+    fx1 = max(int(x1 / stride), 0)
+    fy1 = max(int(y1 / stride), 0)
+    fx2 = min(int((x2 + stride - 1) / stride), W_feat)  # ceil division
+    fy2 = min(int((y2 + stride - 1) / stride), H_feat)
+
+    # Crop the feature map to bbox region
+    region = embedding_map[:, fy1:fy2, fx1:fx2]
+
+    if region.numel() == 0:
+        # fallback to global feature if bbox is too small
+        region = embedding_map
+
+    # Pool to get a single feature vector
+    if pooling == 'avg':
+        feature_vec = region.mean(dim=(1,2))
+    elif pooling == 'max':
+        feature_vec = region.amax(dim=(1,2))
+    else:
+        raise ValueError("pooling must be 'avg' or 'max'")
+
+    return feature_vec
+
+
 def train_sam(
     cfg: Box,
     fabric: L.Fabric,
@@ -191,6 +235,10 @@ def train_sam(
     max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
     match_interval = cfg.match_interval
     eval_interval = int(len(train_dataloader) * 1)
+
+    window_size = 100
+    embedding_queue = []
+    ite_em = 0
 
     # Prepare output dirs
     os.makedirs(os.path.join(cfg.out_dir, "save"), exist_ok=True)
@@ -257,6 +305,7 @@ def train_sam(
                         
                 if len(bboxes) == 0:
                     continue  # skip if no valid region
+               
                         
                         
                         # print("No 1s found in mask")
@@ -267,21 +316,33 @@ def train_sam(
                 bboxes = torch.stack(bboxes)
 
                 with torch.no_grad():
-                    _, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                    embeddings, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
   
                 _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
                 del _
 
-         
+
+              
 
                 num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
                 loss_focal = torch.tensor(0., device=fabric.device)
                 loss_dice = torch.tensor(0., device=fabric.device)
                 loss_iou = torch.tensor(0., device=fabric.device)
 
-                for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
-                        zip(pred_masks, soft_masks, iou_predictions  )
-                    ):
+                for i, (pred_mask, soft_mask, iou_prediction, bbox) in enumerate(
+                        zip(pred_masks, soft_masks, iou_predictions, bboxes  )
+                    ):  
+                        embed_feats = get_bbox_feature( embeddings, bbox)
+                        embedding_queue.append(embed_feats)
+
+                        features = torch.stack(embedding_queue, dim=0)
+                        cos_sim_matrix = F.cosine_similarity(features.unsqueeze(1), features.unsqueeze(0), dim=2)
+# shape: (num_bboxes, num_bboxes)
+                        num = features.size(0)
+                        device = features.device  # automatically gets cuda:0 if features are on GPU
+                        mask = (1 - torch.eye(num, device=device))
+                        loss_match = ((1 - cos_sim_matrix) * mask).sum() / (num * (num - 1))
+
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
                         loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
@@ -289,6 +350,8 @@ def train_sam(
                         batch_iou = calc_iou(pred_mask, soft_mask)
                         loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
 
+                        if len(embedding_queue) > window_size:
+                            embedding_queue.pop(0)
             
                 del  pred_masks, iou_predictions 
                 # loss_dist = loss_dist / num_masks
@@ -297,7 +360,7 @@ def train_sam(
        
 
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_match #+ loss_iou  +  +
 
 
 
