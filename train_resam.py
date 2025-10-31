@@ -347,11 +347,11 @@ def train_sam(
                             eps=eps  # prevent division by zero
                         )
                         num = features.size(0)
-                        device = features.device 
-                        mask = (1 - torch.eye(num, device=device))
-                        cos_sim_matrix = cos_sim_matrix * mask
+                        # device = features.device 
+                        # mask = (1 - torch.eye(num, device=device))
+                        # cos_sim_matrix = cos_sim_matrix * mask
                         if mask.sum() > 0:
-                            loss_match = 1 - (cos_sim_matrix.sum() / mask.sum())
+                            loss_match = 1 - (cos_sim_matrix.mean() )
                         else:
                             loss_match = torch.tensor(0.0, device=features.device)                         
 
