@@ -259,6 +259,7 @@ def train_sam(
         dice_losses = AverageMeter()
         iou_losses = AverageMeter()
         total_losses = AverageMeter()
+        sim_losses = AverageMeter()
         end = time.time()
 
         for iter, data in enumerate(train_dataloader):
@@ -328,6 +329,7 @@ def train_sam(
                 loss_focal = torch.tensor(0., device=fabric.device)
                 loss_dice = torch.tensor(0., device=fabric.device)
                 loss_iou = torch.tensor(0., device=fabric.device)
+                loss_sim = torch.tensor(0., device=fabric.device)
 
                 for i, (pred_mask, soft_mask, iou_prediction, bbox) in enumerate(
                         zip(pred_masks, soft_masks, iou_predictions, bboxes  )
@@ -368,7 +370,7 @@ def train_sam(
                         mask_similar = cos_sim_matrix > threshold
 
                         # Weighted alignment loss
-                        loss_match = ((1 - cos_sim_matrix) * prob_matrix).mean()                         
+                        loss_sim = ((1 - cos_sim_matrix) * prob_matrix).mean()                         
 
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
@@ -382,12 +384,12 @@ def train_sam(
             
                 del  pred_masks, iou_predictions 
                 # loss_dist = loss_dist / num_masks
-                loss_dice = loss_dice #/ num_masks
-                loss_focal = loss_focal #/ num_masks
-       
+                # loss_dice = loss_dice #/ num_masks
+                # loss_focal = loss_focal #/ num_masks
+                # loss_sim = loss_sim
 
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_match #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_sim #+ loss_iou  +  +
 
 
 
@@ -406,6 +408,7 @@ def train_sam(
                 dice_losses.update(loss_dice.item(), batch_size)
                 iou_losses.update(loss_iou.item(), batch_size)
                 total_losses.update(loss_total.item(), batch_size)
+                sim_losses.update(loss_sim.item(), batch_size)
             
                 del loss_dice, loss_iou, loss_focal
 
@@ -413,7 +416,7 @@ def train_sam(
                 fabric.print(
                     f"Epoch [{epoch}] Iter [{iter + 1}/{len(train_dataloader)}] "
                     f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
-                    f"IoU {iou_losses.avg:.4f} | Total {total_losses.avg:.4f}"
+                    f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                 )
             if (iter+1) % eval_interval == 0:
                 val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
