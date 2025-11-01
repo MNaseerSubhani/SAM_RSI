@@ -368,7 +368,7 @@ def train_sam(
                       
 
                         # Weighted alignment loss
-                        loss_sim = ((1 - cos_sim_matrix.mean()) ).  #*prob_matrix                 
+                        loss_sim = ((1 - cos_sim_matrix.mean()) )  #*prob_matrix                 
 
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
