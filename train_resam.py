@@ -241,7 +241,7 @@ def info_nce_loss(features, temperature=0.07):
     N = features.shape[0] // 2
     labels = torch.arange(N, device=features.device)
     labels = torch.cat([labels, labels])  # each pair shares same label
-    print(sim_matrix.shape, labels.shape)
+
     # Compute cross entropy
     loss = F.cross_entropy(sim_matrix.unsqueeze(0), labels)
     return loss
@@ -400,7 +400,8 @@ def train_sam(
                         # loss_global = 1 - cos_sim_matrix.mean()
                         # loss_local = ((1 - cos_sim_matrix) * prob_matrix).mean()
                         # loss_sim = alpha * loss_global + (1 - alpha) * loss_local
-                        loss_sim = info_nce_loss(features)
+                        if j > 0:
+                            loss_sim = info_nce_loss(features)
 
 
 
