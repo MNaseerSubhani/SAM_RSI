@@ -224,12 +224,12 @@ def train_sam(
     scheduler: _FabricOptimizer,
     train_dataloader: DataLoader,
     val_dataloader: DataLoader,
-    target_pts,
+    init_iou
 ):
 
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
-    best_iou = 0.0
+    best_iou = init_iou
     best_state = copy.deepcopy(model.state_dict())
     no_improve_count = 0
     max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
@@ -492,14 +492,16 @@ def main(cfg: Box) -> int:
         full_checkpoint = fabric.load(cfg.model.ckpt)
         model.load_state_dict(full_checkpoint["model"])
         optimizer.load_state_dict(full_checkpoint["optimizer"])
-    # print('-'*100)
-    # print('\033[92mDirect test on the original SAM.\033[0m') 
-    # _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
-    # print('-'*100)
-    # del _     
+    print('-'*100)
+    print('\033[92mDirect test on the original SAM.\033[0m') 
+    init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    print('-'*100)
+    del _     
 
 
-    train_sam(cfg, fabric, model, optimizer, scheduler, train_data, val_data, pt_data)
+
+
+    train_sam(cfg, fabric, model, optimizer, scheduler, train_data, val_data, init_iou)
 
     del model, train_data, val_data
 
