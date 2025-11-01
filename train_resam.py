@@ -360,7 +360,7 @@ def train_sam(
                         # Rescale to [0,1]
                         cos_sim_matrix = (cos_sim_matrix + 1) / 2
 
-                        Temperature
+                        # Temperature
                         tau = 0.07
                         sim_soft = torch.exp(cos_sim_matrix / tau)
                         prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
