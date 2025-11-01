@@ -361,9 +361,9 @@ def train_sam(
                         cos_sim_matrix = (cos_sim_matrix + 1) / 2
 
                         # Temperature
-                        # tau = 0.2
-                        # sim_soft = torch.exp(cos_sim_matrix / tau)
-                        # prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
+                        tau = 0.2
+                        sim_soft = torch.exp(cos_sim_matrix / tau)
+                        prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
 
                       
 
