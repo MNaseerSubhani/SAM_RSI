@@ -390,7 +390,7 @@ def train_sam(
                         # loss_local = ((1 - cos_sim_matrix) * prob_matrix).mean()
                         # loss_sim = alpha * loss_global + (1 - alpha) * loss_local
                         
-                        loss_sim = info_nce_loss(features)
+                        # loss_sim = info_nce_loss(features)
 
 
 
