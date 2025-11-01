@@ -365,9 +365,7 @@ def train_sam(
                         sim_soft = torch.exp(cos_sim_matrix / tau)
                         prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
 
-                        # Optional adaptive threshold
-                        threshold = torch.quantile(cos_sim_matrix, 0.75).item()
-                        mask_similar = cos_sim_matrix > threshold
+                      
 
                         # Weighted alignment loss
                         loss_sim = ((1 - cos_sim_matrix) * prob_matrix).mean()                         
