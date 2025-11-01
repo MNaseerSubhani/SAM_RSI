@@ -219,31 +219,20 @@ import torch
 import torch.nn.functional as F
 
 def info_nce_loss(features, temperature=0.07):
-    """
-    features: tensor of shape (N, D)
-    Each feature should be L2-normalized.
-    """
+    # Normalize features
+    features = F.normalize(features, dim=1)
 
-    # Normalize embeddings
-    # features = F.normalize(features, dim=1)
-
-    # Cosine similarity matrix (N, N)
+    # Cosine similarity matrix
     sim_matrix = torch.matmul(features, features.T) / temperature
 
-    # For numerical stability
-    sim_matrix = sim_matrix - sim_matrix.max(dim=1, keepdim=True)[0]
-
-    # Mask self-similarity (diagonal)
+    # Remove self-similarity (set diagonal to -inf)
     mask = torch.eye(sim_matrix.size(0), device=sim_matrix.device).bool()
     sim_matrix.masked_fill_(mask, -float('inf'))
 
-    # Positive indices — here assuming features are in pairs: (a1, a2, b1, b2, …)
-    N = features.shape[0] // 2
-    labels = torch.arange(N, device=features.device)
-    labels = torch.cat([labels, labels])  # each pair shares same label
-
-    # Compute cross entropy
-    loss = F.cross_entropy(sim_matrix.unsqueeze(0), labels)
+    # Softmax across each row, pick the max as pseudo-positive
+    probs = F.softmax(sim_matrix, dim=1)
+    # Encourage one feature to have one strong positive
+    loss = -torch.log(probs.max(dim=1).values + 1e-8).mean()
     return loss
 
 def train_sam(
@@ -365,7 +354,7 @@ def train_sam(
                         zip(pred_masks, soft_masks, iou_predictions, bboxes  )
                     ):  
                         embed_feats = get_bbox_feature( embeddings, bbox)
-                        embed_feats = F.normalize(embed_feats, p=2, dim=0)
+                        # embed_feats = F.normalize(embed_feats, p=2, dim=0)
                         embedding_queue.append(embed_feats)
                         loss_match = 0
                         
@@ -400,8 +389,8 @@ def train_sam(
                         # loss_global = 1 - cos_sim_matrix.mean()
                         # loss_local = ((1 - cos_sim_matrix) * prob_matrix).mean()
                         # loss_sim = alpha * loss_global + (1 - alpha) * loss_local
-                        if j > 0:
-                            loss_sim = info_nce_loss(features)
+                        
+                        loss_sim = info_nce_loss(features)
 
 
 
