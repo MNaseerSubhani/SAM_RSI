@@ -354,7 +354,7 @@ def train_sam(
                         zip(pred_masks, soft_masks, iou_predictions, bboxes  )
                     ):  
                         embed_feats = get_bbox_feature( embeddings, bbox)
-                        # embed_feats = F.normalize(embed_feats, p=2, dim=0)
+                        embed_feats = F.normalize(embed_feats, p=2, dim=0)
                         embedding_queue.append(embed_feats)
                         loss_match = 0
                         
@@ -398,6 +398,40 @@ def train_sam(
                         # Weighted alignment loss
                         # loss_sim = ((1 - cos_sim_matrix) * prob_matrix).mean() 
                         # loss_sim = (1 - cos_sim_matrix.mean())
+
+
+                        if len(embedding_queue) > 1:
+                            # Stack all embeddings (num_instances, feature_dim)
+                            features = torch.stack(embedding_queue, dim=0)  # [N, D]
+                            eps = 1e-8
+
+                            # Compute cosine similarity matrix
+                            cos_sim_matrix = F.cosine_similarity(
+                                features.unsqueeze(1),  # [N, 1, D]
+                                features.unsqueeze(0),  # [1, N, D]
+                                dim=2,
+                                eps=eps
+                            )  # shape [N, N]
+
+                            # Remove self-similarity bias
+                            num = features.size(0)
+                            mask = (1 - torch.eye(num, device=features.device))
+                            cos_sim_matrix = cos_sim_matrix * mask
+
+                            # ---- Soft alignment (SSAL) ----
+                            # Step 1. Rescale cosine to [0,1]
+                            cos_sim_matrix = (cos_sim_matrix + 1) / 2
+
+                            # Step 2. Compute temperature-scaled soft distribution
+                            tau = 0.07  # you can tune in [0.03–0.1]
+                            sim_soft = torch.exp(cos_sim_matrix / tau)
+                            prob_matrix = sim_soft / (sim_soft.sum(dim=1, keepdim=True) + eps)
+
+                            # Step 3. Soft Semantic Alignment Loss
+                            loss_match = ((1 - cos_sim_matrix) * prob_matrix).sum(dim=1).mean()
+
+                        else:
+                            loss_match = torch.tensor(0.0, device=embeddings.device)
 
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
