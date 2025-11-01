@@ -346,14 +346,29 @@ def train_sam(
                             dim=2,
                             eps=eps  # prevent division by zero
                         )
-                        num = features.size(0)
-                        # device = features.device 
-                        # mask = (1 - torch.eye(num, device=device))
-                        # cos_sim_matrix = cos_sim_matrix * mask
-                        # if mask.sum() > 0:
-                        loss_match = 1 - (cos_sim_matrix.mean() )
+                        # num = features.size(0)
+                        # # device = features.device 
+                        # # mask = (1 - torch.eye(num, device=device))
+                        # # cos_sim_matrix = cos_sim_matrix * mask
+                        # # if mask.sum() > 0:
+                        # loss_match = 1 - (cos_sim_matrix.mean() )
                         # else:
-                        #     loss_match = torch.tensor(0.0, device=features.device)                         
+                        #     loss_match = torch.tensor(0.0, device=features.device)
+
+                        # Rescale to [0,1]
+                        cos_sim_matrix = (cos_sim_matrix + 1) / 2
+
+                        # Temperature
+                        tau = 0.07
+                        sim_soft = torch.exp(cos_sim_matrix / tau)
+                        prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
+
+                        # Optional adaptive threshold
+                        threshold = torch.quantile(cos_sim_matrix, 0.75).item()
+                        mask_similar = cos_sim_matrix > threshold
+
+                        # Weighted alignment loss
+                        loss_match = ((1 - cos_sim_matrix) * prob_matrix).mean()                         
 
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
