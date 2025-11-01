@@ -215,6 +215,36 @@ def get_bbox_feature(embedding_map, bbox, stride=16, pooling='avg'):
 
     return feature_vec
 
+import torch
+import torch.nn.functional as F
+
+def info_nce_loss(features, temperature=0.07):
+    """
+    features: tensor of shape (N, D)
+    Each feature should be L2-normalized.
+    """
+
+    # Normalize embeddings
+    features = F.normalize(features, dim=1)
+
+    # Cosine similarity matrix (N, N)
+    sim_matrix = torch.matmul(features, features.T) / temperature
+
+    # For numerical stability
+    sim_matrix = sim_matrix - sim_matrix.max(dim=1, keepdim=True)[0]
+
+    # Mask self-similarity (diagonal)
+    mask = torch.eye(sim_matrix.size(0), device=sim_matrix.device).bool()
+    sim_matrix.masked_fill_(mask, -float('inf'))
+
+    # Positive indices — here assuming features are in pairs: (a1, a2, b1, b2, …)
+    N = features.shape[0] // 2
+    labels = torch.arange(N, device=features.device)
+    labels = torch.cat([labels, labels])  # each pair shares same label
+
+    # Compute cross entropy
+    loss = F.cross_entropy(sim_matrix, labels)
+    return loss
 
 def train_sam(
     cfg: Box,
@@ -342,12 +372,12 @@ def train_sam(
                             
                         features = torch.stack(embedding_queue, dim=0)
                         eps = 1e-8
-                        cos_sim_matrix = F.cosine_similarity(
-                            features.unsqueeze(1),
-                            features.unsqueeze(0),
-                            dim=2,
-                            eps=eps  # prevent division by zero
-                        )
+                        # cos_sim_matrix = F.cosine_similarity(
+                        #     features.unsqueeze(1),
+                        #     features.unsqueeze(0),
+                        #     dim=2,
+                        #     eps=eps  # prevent division by zero
+                        # )
                         # num = features.size(0)
                         # # device = features.device 
                         # # mask = (1 - torch.eye(num, device=device))
@@ -361,15 +391,23 @@ def train_sam(
                         # cos_sim_matrix = (cos_sim_matrix + 1) / 2
 
                         # Temperature
-                        tau = 0.07
-                        sim_soft = torch.exp(cos_sim_matrix / tau)
-                        prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
+                        # tau = 0.07
+                        # sim_soft = torch.exp(cos_sim_matrix / tau)
+                        # prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
 
                       
+                        # alpha = 0.7
+                        # loss_global = 1 - cos_sim_matrix.mean()
+                        # loss_local = ((1 - cos_sim_matrix) * prob_matrix).mean()
+                        # loss_sim = alpha * loss_global + (1 - alpha) * loss_local
+                        loss_sim = info_nce_loss(features)
+
+
+
 
                         # Weighted alignment loss
                         # loss_sim = ((1 - cos_sim_matrix) * prob_matrix).mean() 
-                        loss_sim = (1 - cos_sim_matrix.mean())
+                        # loss_sim = (1 - cos_sim_matrix.mean())
 
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
