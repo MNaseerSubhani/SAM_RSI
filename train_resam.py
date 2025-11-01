@@ -225,7 +225,7 @@ def info_nce_loss(features, temperature=0.07):
     """
 
     # Normalize embeddings
-    features = F.normalize(features, dim=1)
+    # features = F.normalize(features, dim=1)
 
     # Cosine similarity matrix (N, N)
     sim_matrix = torch.matmul(features, features.T) / temperature
