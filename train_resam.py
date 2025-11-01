@@ -337,7 +337,7 @@ def train_sam(
                         embed_feats = get_bbox_feature( embeddings, bbox)
                         embed_feats = F.normalize(embed_feats, p=2, dim=0)
                         embedding_queue.append(embed_feats)
-                      
+                        loss_match = 0
                         
                             
                         features = torch.stack(embedding_queue, dim=0)
@@ -349,10 +349,10 @@ def train_sam(
                             eps=eps  # prevent division by zero
                         )
                         # num = features.size(0)
-                        # device = features.device 
-                        # mask = (1 - torch.eye(num, device=device))
-                        # cos_sim_matrix = cos_sim_matrix * mask
-                        # if mask.sum() > 0:
+                        # # device = features.device 
+                        # # mask = (1 - torch.eye(num, device=device))
+                        # # cos_sim_matrix = cos_sim_matrix * mask
+                        # # if mask.sum() > 0:
                         # loss_match = 1 - (cos_sim_matrix.mean() )
                         # else:
                         #     loss_match = torch.tensor(0.0, device=features.device)
@@ -361,14 +361,14 @@ def train_sam(
                         cos_sim_matrix = (cos_sim_matrix + 1) / 2
 
                         # Temperature
-                        tau = 0.07
-                        sim_soft = torch.exp(cos_sim_matrix / tau)
-                        prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
+                        # tau = 0.2
+                        # sim_soft = torch.exp(cos_sim_matrix / tau)
+                        # prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
 
                       
 
                         # Weighted alignment loss
-                        loss_sim = (1 - cos_sim_matrix * prob_matrix).mean()   #*prob_matrix                 
+                        loss_sim = ((1 - cos_sim_matrix) * prob_matrix).mean()                         
 
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
