@@ -428,10 +428,10 @@ def train_sam(
                             prob_matrix = sim_soft / (sim_soft.sum(dim=1, keepdim=True) + eps)
 
                             # Step 3. Soft Semantic Alignment Loss
-                            loss_match = ((1 - cos_sim_matrix) * prob_matrix).sum(dim=1).mean()
+                            loss_sim = ((1 - cos_sim_matrix) * prob_matrix).sum(dim=1).mean()
 
                         else:
-                            loss_match = torch.tensor(0.0, device=embeddings.device)
+                            loss_sim = torch.tensor(0.0, device=embeddings.device)
 
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
