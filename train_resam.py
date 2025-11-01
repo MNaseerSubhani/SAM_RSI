@@ -350,10 +350,10 @@ def train_sam(
                         # device = features.device 
                         # mask = (1 - torch.eye(num, device=device))
                         # cos_sim_matrix = cos_sim_matrix * mask
-                        if mask.sum() > 0:
-                            loss_match = 1 - (cos_sim_matrix.mean() )
-                        else:
-                            loss_match = torch.tensor(0.0, device=features.device)                         
+                        # if mask.sum() > 0:
+                        loss_match = 1 - (cos_sim_matrix.mean() )
+                        # else:
+                        #     loss_match = torch.tensor(0.0, device=features.device)                         
 
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
