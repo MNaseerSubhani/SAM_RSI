@@ -302,7 +302,10 @@ def train_sam(
                 # entropy_maps_mask = ((entropy_maps))
                 # entropy_maps_mask = (entropy_maps < 0.1)
                 # pred_filt = pred_stack * entropy_maps_mask
+                print(entropy_maps.max(), entropy_maps.min())
+
                 pred_binary = (entropy_maps < 0.1).float()# (pred_stack > 0.5).float() 
+                print(pred_binary.max(), pred_binary.min())
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
