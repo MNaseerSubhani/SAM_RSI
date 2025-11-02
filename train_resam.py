@@ -427,7 +427,7 @@ def train_sam(
                             cos_sim_matrix = (cos_sim_matrix + 1) / 2
 
                             # Step 2. Compute temperature-scaled soft distribution
-                            tau = 0.5  # you can tune in [0.03–0.1]
+                            tau = 0.07  # you can tune in [0.03–0.1]
                             sim_soft = torch.exp(cos_sim_matrix / tau)
                             prob_matrix = sim_soft / (sim_soft.sum(dim=1, keepdim=True) + eps)
 
