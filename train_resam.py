@@ -129,12 +129,11 @@ def edge_corner_score(x, y, x_c, y_c, w, h, gamma=0.7):
 
         
 def entropy_map_calculate(p):
+    eps = 1e-8
+    p = p.clamp(eps, 1 - eps)  # Safe!
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
     entropy_map = entropy_map.max(dim=0)[0]
-
-    entropy_map_normalized = entropy_map / torch.log(torch.tensor(2.0))
-
-    return entropy_map_normalized
+    return entropy_map / torch.log(torch.tensor(2.0))
 
 def prompt_calibration(cfg, entrop_map, prompts, point_status):
     point_list = []
@@ -303,7 +302,7 @@ def train_sam(
                 # entropy_maps_mask = ((entropy_maps))
                 entropy_maps_mask = (entropy_maps < 0.1)
                 pred_filt = pred_stack * entropy_maps_mask
-                pred_binary = (pred_filt > 0).float()# (pred_stack > 0.5).float() 
+                pred_binary = (pred_filt > 0.99).float()# (pred_stack > 0.5).float() 
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
