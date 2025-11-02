@@ -299,7 +299,7 @@ def train_sam(
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
                 entropy_maps = torch.stack(entropy_maps, dim=0)
                 pred_stack = torch.stack(preds, dim=0)
-                pred_binary = ((pred_stack > 0.9) & (entropy_maps < 0.1)).float()
+                pred_binary = ((pred_stack > 0.99) & (entropy_maps < 0.1)).float()
 
 
                 # pred_stack = torch.stack(preds, dim=0)
@@ -318,16 +318,18 @@ def train_sam(
                 bboxes = []
                 point_list = []
                 point_labels_list = []
+                print(len(preds))
                 for i,  pred in enumerate( preds):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
                     # print(entropy_map.shape, pred.shape)
                     # pred = pred * entropy_map.unsqueeze(0)#(pred[0]>0.5)
-                    pred_w_overlap = (pred>0.9) * invert_overlap_map
-                  
+                    
+                    pred_w_overlap = (pred[0]>0.99) * invert_overlap_map[0]
+                    
 
 
-                    ys, xs = torch.where(pred_w_overlap[0] > 0.5)
+                    ys, xs = torch.where(pred_w_overlap> 0.5)
                     if len(xs) > 0 and len(ys) > 0:
                         x_min, x_max = xs.min().item(), xs.max().item()
                         y_min, y_max = ys.min().item(), ys.max().item()
@@ -335,6 +337,7 @@ def train_sam(
 
                         point_list.append(point_coords)
                         point_labels_list.append(point_coords_lab)
+                    print(bboxes)
                         
                 if len(bboxes) == 0:
                     continue  # skip if no valid region
