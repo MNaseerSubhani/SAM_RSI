@@ -313,7 +313,7 @@ def train_sam(
                 for i,  (pred, entropy_map) in enumerate( zip(preds, entropy_maps_mask)):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
-
+                    print(entropy_map.shape, pred.shape)
                     pred = pred * entropy_map#(pred[0]>0.5)
                     pred_w_overlap = pred * invert_overlap_map[0]
 
