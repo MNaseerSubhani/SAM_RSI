@@ -132,7 +132,9 @@ def entropy_map_calculate(p):
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
     entropy_map = entropy_map.max(dim=0)[0]
 
-    return entropy_map
+    entropy_map_normalized = entropy_map / torch.log(torch.tensor(2.0))
+
+    return entropy_map_normalized
 
 def prompt_calibration(cfg, entrop_map, prompts, point_status):
     point_list = []
@@ -295,9 +297,11 @@ def train_sam(
 
                 batch_size = images_weak.size(0)
 
-                __, preds = process_forward(images_weak, prompts, model)
+                entropy_maps, preds = process_forward(images_weak, prompts, model)
+                entropy_maps = torch.stack(entropy_maps, dim=0)
                 pred_stack = torch.stack(preds, dim=0)
-                pred_binary = (pred_stack > 0.5).float() 
+                entropy_maps_mask = (entropy_maps > 0.9)
+                pred_binary = pred_stack * entropy_maps_mask# (pred_stack > 0.5).float() 
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
@@ -306,11 +310,11 @@ def train_sam(
                 bboxes = []
                 point_list = []
                 point_labels_list = []
-                for i,  pred in enumerate( preds):
+                for i,  (pred, entropy_map) in enumerate( zip(preds, entropy_maps_mask)):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
-                    pred = (pred[0]>0.5)
+                    pred = pred * entropy_map#(pred[0]>0.5)
                     pred_w_overlap = pred * invert_overlap_map[0]
 
 
