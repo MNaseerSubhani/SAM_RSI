@@ -301,7 +301,7 @@ def train_sam(
                 pred_stack = torch.stack(preds, dim=0)
                 pred_binary = ((pred_stack>0.5 ) & (entropy_maps < 0.1)).float()
 
-
+                
                 # pred_stack = torch.stack(preds, dim=0)
                 # entropy_maps_mask = ((entropy_maps))
                 # entropy_maps_mask = (entropy_maps < 0.1)
@@ -465,7 +465,7 @@ def train_sam(
                 # loss_sim = loss_sim
 
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou# + loss_sim #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + loss_sim #+ loss_iou  +  +
 
 
 
