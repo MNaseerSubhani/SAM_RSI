@@ -450,7 +450,7 @@ def train_sam(
                 # loss_sim = loss_sim
 
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 4*loss_sim #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ 4*loss_sim #+ loss_iou  +  +
 
 
 
