@@ -323,7 +323,7 @@ def train_sam(
                   
 
 
-                    ys, xs = torch.where(pred_w_overlap > 0.5)
+                    ys, xs = torch.where(pred_w_overlap[0] > 0.5)
                     if len(xs) > 0 and len(ys) > 0:
                         x_min, x_max = xs.min().item(), xs.max().item()
                         y_min, y_max = ys.min().item(), ys.max().item()
