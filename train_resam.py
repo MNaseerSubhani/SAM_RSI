@@ -324,6 +324,8 @@ def train_sam(
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
                     # print(entropy_map.shape, pred.shape)
                     # pred = pred * entropy_map.unsqueeze(0)#(pred[0]>0.5)
+
+                    # print(pred.shape, invert_overlap_map.shape)
                     
                     pred_w_overlap = (pred[0]) * invert_overlap_map[0]
                     
