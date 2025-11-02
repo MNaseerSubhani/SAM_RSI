@@ -318,7 +318,7 @@ def train_sam(
                 bboxes = []
                 point_list = []
                 point_labels_list = []
-                print(len(preds))
+               
                 for i,  pred in enumerate( preds):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
@@ -337,8 +337,7 @@ def train_sam(
 
                         point_list.append(point_coords)
                         point_labels_list.append(point_coords_lab)
-                    print(bboxes)
-                        
+                
                 if len(bboxes) == 0:
                     continue  # skip if no valid region
                
