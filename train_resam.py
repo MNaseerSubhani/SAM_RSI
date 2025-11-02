@@ -132,8 +132,8 @@ def entropy_map_calculate(p):
     eps = 1e-8
     p = p.clamp(eps, 1 - eps)  # Safe!
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
-    entropy_map = entropy_map.max(dim=0)[0]
-    return entropy_map / torch.log(torch.tensor(2.0))
+    # entropy_map = entropy_map.max(dim=0)[0]
+    return entropy_map# / torch.log(torch.tensor(2.0))
 
 def prompt_calibration(cfg, entrop_map, prompts, point_status):
     point_list = []
@@ -320,7 +320,7 @@ def train_sam(
                     # print(entropy_map.shape, pred.shape)
                     # pred = pred * entropy_map.unsqueeze(0)#(pred[0]>0.5)
                     pred_w_overlap = (entropy_map) * invert_overlap_map[0]
-                    print(pred_w_overlap.max(), pred_w_overlap.min())
+                  
 
 
                     ys, xs = torch.where(pred_w_overlap > 0.5)
