@@ -319,7 +319,7 @@ def train_sam(
                 point_list = []
                 point_labels_list = []
                
-                for i,  pred in enumerate( preds):
+                for i,  pred in enumerate( pred_binary):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
                     # print(entropy_map.shape, pred.shape)
