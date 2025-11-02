@@ -327,7 +327,7 @@ def train_sam(
 
                     # print(pred.shape, invert_overlap_map.shape)
                     
-                    pred_w_overlap = (pred[0]) * invert_overlap_map[0]
+                    pred_w_overlap = (pred[0]) #* invert_overlap_map[0]
                     
 
 
