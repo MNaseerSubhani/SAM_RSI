@@ -136,7 +136,7 @@ def process_forward(img_tensor, prompt, model):
         max_ent = torch.log(torch.tensor(2.0, device=p.device))
         entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
 
-        entropy_maps.append(entropy_norm)
+        entropy_maps.append(entropy_norm[0])
 
 
 
@@ -325,12 +325,13 @@ def train_sam(
                 batch_size = images_weak.size(0)
 
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
-                entropy_maps = torch.stack(entropy_maps, dim=0)
+                entropy_maps = torch.stack(entropy_maps, dim=0).unsqueeze(0)
                 pred_stack = torch.stack(preds, dim=0)
-
+                
             
-                pred_binary = ( (pred_stack>0.5 ) * (entropy_maps<0.1) ).float()  #(pred_stack>0.95 ) & 
-             
+                pred_binary = ((pred_stack  * (1-entropy_maps))>0.5).float()  #(pred_stack>0.95 ) & 
+
+                
 
               
                
