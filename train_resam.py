@@ -342,18 +342,9 @@ def train_sam(
                 for i,  pred in enumerate( pred_binary):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
-                    # print(entropy_map.shape, pred.shape)
-                    # pred = pred * entropy_map.unsqueeze(0)#(pred[0]>0.5)
-
-                    # print(pred.shape, invert_overlap_map.shape)
-
-                    # print(pred.shape, invert_overlap_map.shape)
-           
-                    
+                                
                     pred_w_overlap = (pred) * invert_overlap_map
                     
-
-
                     ys, xs = torch.where(pred_w_overlap> 0.5)
                     if len(xs) > 0 and len(ys) > 0:
                         x_min, x_max = xs.min().item(), xs.max().item()
@@ -399,8 +390,8 @@ def train_sam(
                         loss_match = 0
                         
                             
-                        features = torch.stack(embedding_queue, dim=0)
-                        eps = 1e-8
+                        # features = torch.stack(embedding_queue, dim=0)
+                        # eps = 1e-8
                         # cos_sim_matrix = F.cosine_similarity(
                         #     features.unsqueeze(1),
                         #     features.unsqueeze(0),
@@ -490,7 +481,7 @@ def train_sam(
                 # loss_sim = loss_sim
 
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_sim #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + loss_sim #+ loss_iou  +  +
 
 
 
