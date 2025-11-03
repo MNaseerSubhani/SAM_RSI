@@ -376,8 +376,6 @@ def train_sam(
                     continue  # skip if no valid region
                
                         
-                        
-                        # print("No 1s found in mask")
                 point_ = torch.cat(point_list).squeeze(1)
                 point_labels_ = torch.cat(point_labels_list)
                 new_prompts = [(point_, point_labels_)]
@@ -407,48 +405,7 @@ def train_sam(
                         embedding_queue.append(embed_feats)
                         loss_match = 0
                         
-                            
-                        # features = torch.stack(embedding_queue, dim=0)
-                        # eps = 1e-8
-                        # cos_sim_matrix = F.cosine_similarity(
-                        #     features.unsqueeze(1),
-                        #     features.unsqueeze(0),
-                        #     dim=2,
-                        #     eps=eps  # prevent division by zero
-                        # )
-                        # num = features.size(0)
-                        # # device = features.device 
-                        # # mask = (1 - torch.eye(num, device=device))
-                        # # cos_sim_matrix = cos_sim_matrix * mask
-                        # # if mask.sum() > 0:
-                        # loss_match = 1 - (cos_sim_matrix.mean() )
-                        # else:
-                        #     loss_match = torch.tensor(0.0, device=features.device)
-
-                        # Rescale to [0,1]
-                        # cos_sim_matrix = (cos_sim_matrix + 1) / 2
-
-                        # Temperature
-                        # tau = 0.07
-                        # sim_soft = torch.exp(cos_sim_matrix / tau)
-                        # prob_matrix = sim_soft / sim_soft.sum(dim=1, keepdim=True)
-
-                      
-                        # alpha = 0.7
-                        # loss_global = 1 - cos_sim_matrix.mean()
-                        # loss_local = ((1 - cos_sim_matrix) * prob_matrix).mean()
-                        # loss_sim = alpha * loss_global + (1 - alpha) * loss_local
-                        
-                        # loss_sim = info_nce_loss(features)
-
-
-
-
-                        # Weighted alignment loss
-                        # loss_sim = ((1 - cos_sim_matrix) * prob_matrix).mean() 
-                        # loss_sim = (1 - cos_sim_matrix.mean())
-
-
+                       
                         if len(embedding_queue) > 1:
                             # Stack all embeddings (num_instances, feature_dim)
                             features = torch.stack(embedding_queue, dim=0)  # [N, D]
@@ -493,12 +450,7 @@ def train_sam(
                             embedding_queue.pop(0)
             
                 del  pred_masks, iou_predictions 
-                # loss_dist = loss_dist / num_masks
-                # loss_dice = loss_dice #/ num_masks
-                # loss_focal = loss_focal #/ num_masks
-                # loss_sim = loss_sim
-
-
+            
                 loss_total =  20 * loss_focal +  loss_dice  + loss_iou + loss_sim #+ loss_iou  +  +
 
 
