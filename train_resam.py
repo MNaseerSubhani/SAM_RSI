@@ -235,7 +235,8 @@ def info_nce_loss(features, temperature=0.07):
     # Encourage one feature to have one strong positive
     loss = -torch.log(probs.max(dim=1).values + 1e-8).mean()
     return loss
-
+from scipy.ndimage import label
+import numpy as np
 def train_sam(
     cfg: Box,
     fabric: L.Fabric,
@@ -365,8 +366,10 @@ def train_sam(
                     # pred = pred * entropy_map.unsqueeze(0)#(pred[0]>0.5)
 
                     # print(pred.shape, invert_overlap_map.shape)
+
+                    # print(pred.shape, invert_overlap_map.shape)
                     
-                    pred_w_overlap = (pred[0]) * invert_overlap_map[0]
+                    pred_w_overlap = (pred) * invert_overlap_map
                     
 
 
