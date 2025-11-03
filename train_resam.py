@@ -101,19 +101,46 @@ def create_entropy_mask(entropy_maps, threshold=0.5, device='cuda'):
 def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
         _, masks_pred, _, _ = model(img_tensor, prompt)
+    # entropy_maps = []
+    # pred_ins = []
+    # for i, mask_p in enumerate( masks_pred[0]):
+
+    #     p = mask_p.clamp(1e-6, 1 - 1e-6)
+    #     if p.ndim == 2:
+    #         p = p.unsqueeze(0)
+
+    #     entropy_map = entropy_map_calculate(p)
+    #     C = p.shape[0]
+    #     print(C)                                 # number of classes
+    #     max_ent = torch.log(torch.tensor(C, dtype=torch.float32, device=p.device))
+    #     entropy_norm = entropy_map / (max_ent + 1e-8)    # [0, 1]
+    #     entropy_maps.append(entropy_norm)
+    #     pred_ins.append(p)
     entropy_maps = []
-    pred_ins = []
-    for i, mask_p in enumerate( masks_pred[0]):
+    
+    for mask_p in masks_pred[0]:  # or just masks_pred if it's already a list
 
-        p = mask_p.clamp(1e-6, 1 - 1e-6)
+ 
+        p = mask_p.clamp(1e-6, 1.0 - 1e-6)
+
+        # Ensure channel dim
         if p.ndim == 2:
-            p = p.unsqueeze(0)
+            p = p.unsqueeze(0)        # [1, H, W]
+        elif p.ndim == 3 and p.shape[0] != 1:
+            pass  # already [C, H, W]
 
-        entropy_map = entropy_map_calculate(p)
-        entropy_maps.append(entropy_map)
-        pred_ins.append(p)
+        # Entropy per pixel
+        entropy = -(p * torch.log(p) + (1 - p) * torch.log(1 - p))  # [H, W]
 
-    return entropy_maps, pred_ins
+  
+        max_ent = torch.log(torch.tensor(2.0, device=p.device))
+        entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
+
+        entropy_maps.append(entropy_norm)
+
+
+
+    return entropy_maps, masks_pred
         
         
         
@@ -301,56 +328,13 @@ def train_sam(
                 entropy_maps = torch.stack(entropy_maps, dim=0)
                 pred_stack = torch.stack(preds, dim=0)
 
-       
-                # pred_binary = ((entropy_maps < 0.1)).float()  #(pred_stack>0.95 ) & 
-                # --- NEW: Instance-aware entropy filtering ---
-                eps = 1e-8
-                pred_stack = pred_stack.clamp(eps, 1 - eps)
-                entropy_maps = - (pred_stack * torch.log(pred_stack) + (1 - pred_stack) * torch.log(1 - pred_stack))
+            
+                pred_binary = ( (pred_stack>0.5 ) * (entropy_maps<0.1) ).float()  #(pred_stack>0.95 ) & 
+             
 
-                # Convert entropy to bits for interpretability
-                entropy_maps_bits = entropy_maps / torch.log(torch.tensor(2.0))
-
-                # Parameters (tunable)
-                ENTROPY_THRESHOLD_BITS = 0.30   # ~ p > 0.93 on average
-                MIN_AREA = 50                   # Ignore tiny noisy blobs
-
-                pred_binary = torch.zeros_like(pred_stack[0])  # Final [1, H, W]
-
-                # Process each prediction in the batch
-                for b in range(pred_stack.size(0)):
-                    prob_map = pred_stack[b]           # [1, H, W]
-                    ent_map = entropy_maps_bits[b]     # [1, H, W]
-
-                    # Binarize with moderate threshold to get candidate masks
-                    candidate_mask = (prob_map > 0.7).float().squeeze(0).cpu().numpy()  # [H, W]
-
-                    # Connected components → instance proposals
-                    labeled_array, num_features = label(candidate_mask)
-                    
-                    for idx in range(1, num_features + 1):
-                        inst_mask_np = (labeled_array == idx)
-                        area = inst_mask_np.sum()
-                        
-                        if area < MIN_AREA:
-                            continue
-                        
-                        # Convert to torch
-                        inst_mask = torch.from_numpy(inst_mask_np).bool().to(prob_map.device)
-                        
-                        # Compute mean entropy & confidence inside instance
-                        mean_entropy = ent_map[0][inst_mask].mean().item()
-                        mean_conf = prob_map[0][inst_mask].mean().item()
-                        
-                        # Keep if low entropy (high certainty)
-                        if mean_entropy < ENTROPY_THRESHOLD_BITS:
-                            pred_binary[0][inst_mask] = 1.0
-
+              
                
-
-                # pred_binary = (entropy_maps < 0.1).float()# (pred_stack > 0.5).float() 
-               
-                overlap_count = pred_binary.sum(dim=0)
+                overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
 
@@ -369,7 +353,7 @@ def train_sam(
 
                     # print(pred.shape, invert_overlap_map.shape)
                     
-                    pred_w_overlap = (pred) * invert_overlap_map
+                    pred_w_overlap = (pred[0]) * invert_overlap_map[0]
                     
 
 
@@ -509,7 +493,7 @@ def train_sam(
                 # loss_sim = loss_sim
 
 
-                loss_total =   0.1* loss_focal +  loss_dice  + loss_iou #+ loss_sim #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_sim #+ loss_iou  +  +
 
 
 
