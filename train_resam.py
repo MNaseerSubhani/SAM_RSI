@@ -301,7 +301,49 @@ def train_sam(
                 pred_stack = torch.stack(preds, dim=0)
 
        
-                pred_binary = ((pred_stack>0.95 ) & (entropy_maps < 0.1)).float()
+                # pred_binary = ((entropy_maps < 0.1)).float()  #(pred_stack>0.95 ) & 
+                # --- NEW: Instance-aware entropy filtering ---
+                eps = 1e-8
+                pred_stack = pred_stack.clamp(eps, 1 - eps)
+                entropy_maps = - (pred_stack * torch.log(pred_stack) + (1 - pred_stack) * torch.log(1 - pred_stack))
+
+                # Convert entropy to bits for interpretability
+                entropy_maps_bits = entropy_maps / torch.log(torch.tensor(2.0))
+
+                # Parameters (tunable)
+                ENTROPY_THRESHOLD_BITS = 0.30   # ~ p > 0.93 on average
+                MIN_AREA = 50                   # Ignore tiny noisy blobs
+
+                pred_binary = torch.zeros_like(pred_stack[0])  # Final [1, H, W]
+
+                # Process each prediction in the batch
+                for b in range(pred_stack.size(0)):
+                    prob_map = pred_stack[b]           # [1, H, W]
+                    ent_map = entropy_maps_bits[b]     # [1, H, W]
+
+                    # Binarize with moderate threshold to get candidate masks
+                    candidate_mask = (prob_map > 0.7).float().squeeze(0).cpu().numpy()  # [H, W]
+
+                    # Connected components → instance proposals
+                    labeled_array, num_features = label(candidate_mask)
+                    
+                    for idx in range(1, num_features + 1):
+                        inst_mask_np = (labeled_array == idx)
+                        area = inst_mask_np.sum()
+                        
+                        if area < MIN_AREA:
+                            continue
+                        
+                        # Convert to torch
+                        inst_mask = torch.from_numpy(inst_mask_np).bool().to(prob_map.device)
+                        
+                        # Compute mean entropy & confidence inside instance
+                        mean_entropy = ent_map[0][inst_mask].mean().item()
+                        mean_conf = prob_map[0][inst_mask].mean().item()
+                        
+                        # Keep if low entropy (high certainty)
+                        if mean_entropy < ENTROPY_THRESHOLD_BITS:
+                            pred_binary[0][inst_mask] = 1.0
 
                
 
