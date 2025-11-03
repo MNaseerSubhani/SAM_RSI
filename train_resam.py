@@ -585,7 +585,7 @@ def main(cfg: Box) -> int:
     #         fabric.print(f"Resumed from explicit checkpoint: {cfg.model.ckpt}")
         # if not loaded:
 
-    auto_ckpt = _find_latest_checkpoint(os.path.join(cfg.out_dir, "save"))
+    auto_ckpt = None#_find_latest_checkpoint(os.path.join(cfg.out_dir, "save"))
 
     
     if auto_ckpt is not None:
