@@ -76,6 +76,24 @@ def sort_entropy_(model, target_pts):
     collected.sort(key=lambda x: x[0], reverse=True)
 
     return collected
+def _find_latest_checkpoint(save_dir):
+    """
+    Look for the most recent .pt/.pth file in save_dir.
+    Returns absolute path or None if not found.
+    """
+    if not os.path.isdir(save_dir):
+        return None
+    ckpt_files = [
+        os.path.join(save_dir, f)
+        for f in os.listdir(save_dir)
+        if f.endswith(".pt") or f.endswith(".pth")
+    ]
+    if not ckpt_files:
+        return None
+    ckpt_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    return ckpt_files[0]
+
+
 def create_entropy_mask(entropy_maps, threshold=0.5, device='cuda'):
     """
     Create a mask to reduce learning from high entropy regions.
@@ -598,16 +616,51 @@ def main(cfg: Box) -> int:
     optimizer, scheduler = configure_opt(cfg, model)
     model, optimizer = fabric.setup(model, optimizer)
 
-    if cfg.resume and cfg.model.ckpt is not None:
-        full_checkpoint = fabric.load(cfg.model.ckpt)
-        model.load_state_dict(full_checkpoint["model"])
-        optimizer.load_state_dict(full_checkpoint["optimizer"])
+    
+    # Auto-resume: prefer explicit cfg.model.ckpt, otherwise latest in out_dir/save
+    # if cfg.get("resume", False):
+    #     loaded = False
+    #     print("KKKKKKKKKKKKKk")
+    #     if cfg.model.ckpt is not None:
+    #         full_checkpoint = fabric.load(cfg.model.ckpt)
+    #         if isinstance(full_checkpoint, dict) and "model" in full_checkpoint:
+    #             model.load_state_dict(full_checkpoint["model"])
+    #             if "optimizer" in full_checkpoint:
+    #                 optimizer.load_state_dict(full_checkpoint["optimizer"])
+    #         else:
+    #             model.load_state_dict(full_checkpoint)
+    #         loaded = True
+    #         fabric.print(f"Resumed from explicit checkpoint: {cfg.model.ckpt}")
+        # if not loaded:
+
+    auto_ckpt = _find_latest_checkpoint(os.path.join(cfg.out_dir, "save"))
+
+    
+    if auto_ckpt is not None:
+        full_checkpoint = fabric.load(auto_ckpt)
+
+        if isinstance(full_checkpoint, dict) and "model" in full_checkpoint:
+            model.load_state_dict(full_checkpoint["model"])
+            if "optimizer" in full_checkpoint:
+                optimizer.load_state_dict(full_checkpoint["optimizer"])
+        else:
+            model.load_state_dict(full_checkpoint)
+        loaded = True
+        fabric.print(f"Resumed from explicit checkpoint: {cfg.model.ckpt}")
+        # state = torch.load(auto_ckpt, map_location=fabric.device)
+        # if isinstance(state, dict) and "model" in state:
+        #     model.load_state_dict(state["model"])
+        #     if "optimizer" in state:
+        #         optimizer.load_state_dict(state["optimizer"])
+        # else:
+        #     model.load_state_dict(state)
+        # fabric.print(f"Auto-resumed from: {auto_ckpt}")
     init_iou = 0
-    # print('-'*100)
-    # print('\033[92mDirect test on the original SAM.\033[0m') 
-    # init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
-    # print('-'*100)
-    # del _     
+    print('-'*100)
+    print('\033[92mDirect test on the original SAM.\033[0m') 
+    init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    print('-'*100)
+    del _     
 
 
 
