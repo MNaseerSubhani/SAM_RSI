@@ -443,7 +443,7 @@ def train_sam(
                         else:
                             loss_sim = torch.tensor(0.0, device=embeddings.device)
 
-                        soft_mask = (soft_mask > 0.).float()
+                        soft_mask = (soft_mask > 0.5).float()
                         print(soft_mask.mean(), gt_masks_new[i].mean())
 
                         # Apply entropy mask to losses
