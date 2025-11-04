@@ -347,7 +347,7 @@ def train_sam(
                 pred_stack = torch.stack(preds, dim=0)
            
                               
-                pred_binary = ((pred_stack[0]  )>0.95).float()  #* (1-entropy_maps[0]
+                pred_binary = ((pred_stack[0]  * (1-entropy_maps[0]))>0.5).float()  #(pred_stack>0.95 ) & 
  
                 overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
@@ -481,7 +481,7 @@ def train_sam(
                     f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
                     f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                 )
-            if (iter+1) % eval_interval == 0:
+            if (iter+1) % 150 == 0:
                 val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
                 status = ""
