@@ -345,8 +345,9 @@ def train_sam(
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
                 entropy_maps = torch.stack(entropy_maps, dim=0).unsqueeze(0)
                 pred_stack = torch.stack(preds, dim=0)
+           
                               
-                pred_binary = ((pred_stack[0]  * (1-entropy_maps[0]))>0.95).float()  #(pred_stack>0.95 ) & 
+                pred_binary = ((pred_stack[0]  ))>0.95).float()  #* (1-entropy_maps[0]
  
                 overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
@@ -360,7 +361,7 @@ def train_sam(
                 for i,  pred in enumerate( pred_binary):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
-                                
+                  
                     pred_w_overlap = (pred) * invert_overlap_map
                     
                     ys, xs = torch.where(pred_w_overlap> 0.5)
@@ -593,11 +594,11 @@ def main(cfg: Box) -> int:
         #     model.load_state_dict(state)
         # fabric.print(f"Auto-resumed from: {auto_ckpt}")
     init_iou = 0
-    print('-'*100)
-    print('\033[92mDirect test on the original SAM.\033[0m') 
-    init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
-    print('-'*100)
-    del _     
+    # print('-'*100)
+    # print('\033[92mDirect test on the original SAM.\033[0m') 
+    # init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    # print('-'*100)
+    # del _     
 
 
 
