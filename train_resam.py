@@ -347,7 +347,7 @@ def train_sam(
                 pred_stack = torch.stack(preds, dim=0)
            
                               
-                pred_binary = ((pred_stack[0]  ))>0.95).float()  #* (1-entropy_maps[0]
+                pred_binary = ((pred_stack[0]  )>0.95).float()  #* (1-entropy_maps[0]
  
                 overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
