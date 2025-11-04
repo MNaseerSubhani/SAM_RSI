@@ -398,8 +398,8 @@ def train_sam(
                 loss_iou = torch.tensor(0., device=fabric.device)
                 loss_sim = torch.tensor(0., device=fabric.device)
 
-                print(soft_masks.mean(), gt_masks_new.mean())
-
+                print(torch.stack(soft_masks,dim=0).mean(), torch.stack(gt_masks_new, dim=0).mean())
+4
                 for i, (pred_mask, soft_mask, iou_prediction, bbox) in enumerate(
                         zip(pred_masks, soft_masks, iou_predictions, bboxes  )
                     ):  
