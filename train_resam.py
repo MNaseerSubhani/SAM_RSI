@@ -457,9 +457,9 @@ def train_sam(
             
                 del  pred_masks, iou_predictions 
             
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_sim #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ 0.1*loss_sim #+ loss_iou  +  +
 
-
+                
 
                 fabric.backward(loss_total)
 
@@ -576,7 +576,7 @@ def main(cfg: Box) -> int:
 
     
 
-    auto_ckpt = None#_find_latest_checkpoint(os.path.join(cfg.out_dir, "save"))
+    auto_ckpt = _find_latest_checkpoint(os.path.join(cfg.out_dir, "save"))
 
     
     if auto_ckpt is not None:
