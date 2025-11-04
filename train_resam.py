@@ -486,7 +486,7 @@ def train_sam(
                     f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
                     f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                 )
-            if (iter+1) % eval_interval == 0:
+            if (iter+1) % 700 == 0:
                 val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
                 status = ""
@@ -598,7 +598,7 @@ def main(cfg: Box) -> int:
         # else:
         #     model.load_state_dict(state)
         # fabric.print(f"Auto-resumed from: {auto_ckpt}")
-    init_iou = 0
+    init_iou = 67
     # print('-'*100)
     # print('\033[92mDirect test on the original SAM.\033[0m') 
     # init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
