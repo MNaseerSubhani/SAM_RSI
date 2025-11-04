@@ -358,11 +358,11 @@ def train_sam(
                 point_list = []
                 point_labels_list = []
                
-                for i,  pred in enumerate( preds):
+                for i,  pred in enumerate( pred_binary):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
                   
-                    pred_w_overlap = (pred[0]>0.95) * invert_overlap_map
+                    pred_w_overlap = (pred) * invert_overlap_map
                     
                     ys, xs = torch.where(pred_w_overlap> 0.5)
                     if len(xs) > 0 and len(ys) > 0:
