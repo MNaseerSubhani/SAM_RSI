@@ -230,7 +230,7 @@ def train_sam(
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
                   
-                    pred_without_overlap = (pred) * invert_overlap_map
+                    pred_without_overlap = (pred>0.95) * invert_overlap_map
               
                     ys, xs = torch.where(pred_without_overlap> 0.5)
                     if len(xs) > 0 and len(ys) > 0:
@@ -365,7 +365,7 @@ def train_sam(
                     f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
                     f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                 )
-            if (iter+1) % 90 == 0:
+            if (iter+1) % eval_interval == 0:
                 val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
                 status = ""
