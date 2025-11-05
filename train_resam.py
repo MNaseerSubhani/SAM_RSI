@@ -35,50 +35,6 @@ from collections import deque
 
 # vis = False
 
-
-def sort_entropy_(model, target_pts):
-
-    # save_dir = "entropy_sorted"
-    # os.makedirs(save_dir, exist_ok=True)
-
-    collected = []
-    with torch.no_grad():
-        for i, batch in enumerate(tqdm(target_pts, desc='Computing per-sample entropy', ncols=100)):
-            imgs, boxes, masks, img_paths = batch
-            prompts = get_prompts(cfg, boxes, masks)
-            embeds, masks_pred, _, _ = model(imgs, prompts)
-
-            batch_size = imgs.shape[0]
-            for b in range(batch_size):
-                img_np = (imgs[b].permute(1,2,0).cpu().numpy() * 255).astype(np.uint8)
-                p_b = masks_pred[b].clamp(1e-6, 1 - 1e-6)
-                if p_b.ndim == 2:
-                    p_b = p_b.unsqueeze(0)
-                gt_b = masks[b]
-                if gt_b.ndim == 2:
-                    gt_b = gt_b.unsqueeze(0)
-
-                entropy_scalar = 0
-                num_inst = p_b.shape[0]
-                for j in range(num_inst):
-                    p_inst = p_b[j]
-                    entropy_map_inst = - (p_inst * torch.log(p_inst) + (1 - p_inst) * torch.log(1 - p_inst))
-                    entropy_scalar += float(entropy_map_inst.mean().cpu().item())
-
-                entropy_scalar /= num_inst
-                render = {
-                    'real': img_np,
-                    'prompt': prompts
-                }
-                img_path = img_paths[b] if isinstance(img_paths, (list, tuple)) else img_paths
-                collected.append((entropy_scalar, img_path, render))
-
-            if i>10:
-                break
-
-    collected.sort(key=lambda x: x[0], reverse=True)
-
-    return collected
 def _find_latest_checkpoint(save_dir):
     """
     Look for the most recent .pt/.pth file in save_dir.
@@ -95,28 +51,6 @@ def _find_latest_checkpoint(save_dir):
         return None
     ckpt_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return ckpt_files[0]
-
-
-def create_entropy_mask(entropy_maps, threshold=0.5, device='cuda'):
-    """
-    Create a mask to reduce learning from high entropy regions.
-    
-    Args:
-        entropy_maps: List of entropy maps for each instance
-        threshold: Entropy threshold above which to mask out regions
-        device: Device to place the mask on
-    
-    Returns:
-        List of entropy masks (0 for high entropy, 1 for low entropy)
-    """
-    entropy_masks = []
-    
-    for entropy_map in entropy_maps:
-        # Create binary mask: 1 for low entropy, 0 for high entropy
-        entropy_mask = (entropy_map < threshold).float()
-        entropy_masks.append(entropy_mask)
-    
-    return entropy_masks
 
 
 def process_forward(img_tensor, prompt, model):
@@ -138,64 +72,34 @@ def process_forward(img_tensor, prompt, model):
 
     return entropy_maps, masks_pred
         
+def configure_opt(cfg: Box, model: Model):
+
+    def lr_lambda(step):
+        if step < cfg.opt.warmup_steps:
+            return step / cfg.opt.warmup_steps
+        elif step < cfg.opt.steps[0]:
+            return 1.0
+        elif step < cfg.opt.steps[1]:
+            return 1 / cfg.opt.decay_factor
+        else:
+            return 1 / (cfg.opt.decay_factor**2)
+
+    # optimize only trainable params (e.g., LoRA)
+    trainable_params = (p for p in model.model.parameters() if p.requires_grad)
+    optimizer = torch.optim.Adam(trainable_params, lr=cfg.opt.learning_rate, weight_decay=cfg.opt.weight_decay)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    return optimizer, scheduler
+
+
+def corrupt_main(cfg):
+    for corrupt in cfg.corruptions:
+        cfg.corrupt = corrupt
+        cfg.out_name = corrupt
+        torch.cuda.empty_cache()
+        main(cfg)
+   
         
-        
-
-def edge_corner_score(x, y, x_c, y_c, w, h, gamma=0.7):
-    dx = 2 * torch.abs(x - x_c) / w
-    dy = 2 * torch.abs(y - y_c) / h
-    dx = torch.clamp(dx, 0, 1)
-    dy = torch.clamp(dy, 0, 1)
-    # high on edges + corners, low at center
-    score = (dx + dy - dx * dy) ** gamma
-    return score
-
-        
-def entropy_map_calculate(p):
-    eps = 1e-8
-    p = p.clamp(eps, 1 - eps)  # Safe!
-    entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
-    # entropy_map = entropy_map.max(dim=0)[0]
-    return entropy_map# / torch.log(torch.tensor(2.0))
-
-def prompt_calibration(cfg, entrop_map, prompts, point_status):
-    point_list = []
-    point_labels_list = []
-    num_points = cfg.num_points
-
-    for m in range(len(entrop_map)):
-        point_coords = prompts[0][0][m][:].unsqueeze(0)
-        point_coords_lab = prompts[0][1][m][:].unsqueeze(0)
-
-        # Find high-entropy location
-        max_idx = torch.argmax(entrop_map[m])
-        y = max_idx // entrop_map[m].shape[1]
-        x = max_idx % entrop_map[m].shape[1]
-        neg_point_coords = torch.tensor([[x.item(), y.item()]], device=point_coords.device).unsqueeze(0)
-
-
-        # Combine positive and negative points
-        point_coords_all = torch.cat((point_coords, neg_point_coords), dim=1)
-        
-        # Append a new label (1) to the label tensor
-        point_labels_all = torch.cat(
-            (point_coords_lab, torch.tensor([[point_status]], device=point_coords.device, dtype=point_coords_lab.dtype)),
-            dim=1
-        )
-        
-        point_list.append(point_coords_all)
-        point_labels_list.append(point_labels_all)
-
-
-
-
-
-    point_ = torch.cat(point_list).squeeze(1)
-    point_labels_ = torch.cat(point_labels_list)
-    new_prompts = [(point_, point_labels_)]
-    return new_prompts
-
-
 def get_bbox_feature(embedding_map, bbox, stride=16, pooling='avg'):
     """
     Extract a feature vector from an embedding map given a bounding box.
@@ -239,25 +143,7 @@ def get_bbox_feature(embedding_map, bbox, stride=16, pooling='avg'):
 
     return feature_vec
 
-import torch
-import torch.nn.functional as F
 
-def info_nce_loss(features, temperature=0.07):
-    # Normalize features
-    features = F.normalize(features, dim=1)
-
-    # Cosine similarity matrix
-    sim_matrix = torch.matmul(features, features.T) / temperature
-
-    # Remove self-similarity (set diagonal to -inf)
-    mask = torch.eye(sim_matrix.size(0), device=sim_matrix.device).bool()
-    sim_matrix.masked_fill_(mask, -float('inf'))
-
-    # Softmax across each row, pick the max as pseudo-positive
-    probs = F.softmax(sim_matrix, dim=1)
-    # Encourage one feature to have one strong positive
-    loss = -torch.log(probs.max(dim=1).values + 1e-8).mean()
-    return loss
 
 def train_sam(
     cfg: Box,
@@ -314,7 +200,6 @@ def train_sam(
             slice_step = 50
             for j in range(0, len(gt_masks[0]), slice_step):
              
-                
                 gt_masks_new = gt_masks[0][j:j+slice_step].unsqueeze(0)
                 prompts = get_prompts(cfg, bboxes_gt, gt_masks_new)
 
@@ -323,16 +208,8 @@ def train_sam(
 
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
                 entropy_maps = torch.stack(entropy_maps, dim=0).unsqueeze(0)
-
-
-                # print("LLLLLLLLLLLLLLLLL")
-                # plt.imshow(entropy_norm.cpu().numpy(), cmap='viridis')
-                # plt.show()
                               
-                pred_binary = ((preds[0]* (1-entropy_maps[0])) >0.5).float() #* (1-entropy_maps[0]) #(pred_stack>0.95 ) & 
-
-                
-                
+                pred_binary = ((preds[0]* (1-entropy_maps[0])) >0.95).float() #* (1-entropy_maps[0]) #(pred_stack>0.95 ) & 
 
                 overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
@@ -350,8 +227,6 @@ def train_sam(
                   
                     pred_without_overlap = (pred) * invert_overlap_map
               
-                    
-                    
                     ys, xs = torch.where(pred_without_overlap> 0.5)
                     if len(xs) > 0 and len(ys) > 0:
                         x_min, x_max = xs.min().item(), xs.max().item()
@@ -374,7 +249,6 @@ def train_sam(
                 with torch.no_grad():
                     embeddings, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
                     
-  
                 _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
                 del _
 
@@ -507,32 +381,6 @@ def train_sam(
 
 
             
-def configure_opt(cfg: Box, model: Model):
-
-    def lr_lambda(step):
-        if step < cfg.opt.warmup_steps:
-            return step / cfg.opt.warmup_steps
-        elif step < cfg.opt.steps[0]:
-            return 1.0
-        elif step < cfg.opt.steps[1]:
-            return 1 / cfg.opt.decay_factor
-        else:
-            return 1 / (cfg.opt.decay_factor**2)
-
-    # optimize only trainable params (e.g., LoRA)
-    trainable_params = (p for p in model.model.parameters() if p.requires_grad)
-    optimizer = torch.optim.Adam(trainable_params, lr=cfg.opt.learning_rate, weight_decay=cfg.opt.weight_decay)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-
-    return optimizer, scheduler
-
-
-def corrupt_main(cfg):
-    for corrupt in cfg.corruptions:
-        cfg.corrupt = corrupt
-        cfg.out_name = corrupt
-        torch.cuda.empty_cache()
-        main(cfg)
 
 
 def main(cfg: Box) -> int:
