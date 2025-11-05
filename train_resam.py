@@ -372,7 +372,7 @@ def train_sam(
                 bboxes = torch.stack(bboxes)
 
                 with torch.no_grad():
-                    embeddings, soft_masks_logit, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                    embeddings, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
                     
   
                 _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
