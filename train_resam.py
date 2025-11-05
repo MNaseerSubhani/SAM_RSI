@@ -598,7 +598,7 @@ def main(cfg: Box) -> int:
         # else:
         #     model.load_state_dict(state)
         # fabric.print(f"Auto-resumed from: {auto_ckpt}")
-    init_iou = 67
+    init_iou = 0.67
     # print('-'*100)
     # print('\033[92mDirect test on the original SAM.\033[0m') 
     # init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
