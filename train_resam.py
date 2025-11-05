@@ -13,6 +13,9 @@ from tqdm import tqdm
 from PIL import Image
 from matplotlib import cm
 
+from scipy.ndimage import label
+import numpy as np
+
 import lightning as L
 from lightning.fabric.loggers import TensorBoardLogger
 from lightning.fabric.fabric import _FabricOptimizer
@@ -280,8 +283,7 @@ def info_nce_loss(features, temperature=0.07):
     # Encourage one feature to have one strong positive
     loss = -torch.log(probs.max(dim=1).values + 1e-8).mean()
     return loss
-from scipy.ndimage import label
-import numpy as np
+
 def train_sam(
     cfg: Box,
     fabric: L.Fabric,
@@ -357,8 +359,9 @@ def train_sam(
                 bboxes = []
                 point_list = []
                 point_labels_list = []
+                
                
-                for i,  pred in enumerate( preds):
+                for i,  pred in enumerate( preds[0]):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
                   
@@ -576,7 +579,7 @@ def main(cfg: Box) -> int:
 
     
 
-    auto_ckpt = _find_latest_checkpoint(os.path.join(cfg.out_dir, "save"))
+    auto_ckpt = None#_find_latest_checkpoint(os.path.join(cfg.out_dir, "save"))
 
     
     if auto_ckpt is not None:
@@ -598,12 +601,12 @@ def main(cfg: Box) -> int:
         # else:
         #     model.load_state_dict(state)
         # fabric.print(f"Auto-resumed from: {auto_ckpt}")
-    init_iou = 0.67
-    # print('-'*100)
-    # print('\033[92mDirect test on the original SAM.\033[0m') 
-    # init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
-    # print('-'*100)
-    # del _     
+    init_iou = 0
+    print('-'*100)
+    print('\033[92mDirect test on the original SAM.\033[0m') 
+    init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    print('-'*100)
+    del _     
 
 
 
