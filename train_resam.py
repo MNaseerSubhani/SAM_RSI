@@ -121,45 +121,20 @@ def create_entropy_mask(entropy_maps, threshold=0.5, device='cuda'):
 
 def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
-        _, masks_pred, _, _ = model(img_tensor, prompt)
-    # entropy_maps = []
-    # pred_ins = []
-    # for i, mask_p in enumerate( masks_pred[0]):
+        _, logits, _, _ = model(img_tensor, prompt)
 
-    #     p = mask_p.clamp(1e-6, 1 - 1e-6)
-    #     if p.ndim == 2:
-    #         p = p.unsqueeze(0)
-
-    #     entropy_map = entropy_map_calculate(p)
-    #     C = p.shape[0]
-    #     print(C)                                 # number of classes
-    #     max_ent = torch.log(torch.tensor(C, dtype=torch.float32, device=p.device))
-    #     entropy_norm = entropy_map / (max_ent + 1e-8)    # [0, 1]
-    #     entropy_maps.append(entropy_norm)
-    #     pred_ins.append(p)
+    masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
     entropy_maps = []
-    
+    eps = 1e-8
     for mask_p in masks_pred[0]:  # or just masks_pred if it's already a list
-
- 
-        p = mask_p.clamp(1e-6, 1.0 - 1e-6)
-
-        # Ensure channel dim
-        if p.ndim == 2:
-            p = p.unsqueeze(0)        # [1, H, W]
-        elif p.ndim == 3 and p.shape[0] != 1:
-            pass  # already [C, H, W]
-
         # Entropy per pixel
-        entropy = -(p * torch.log(p) + (1 - p) * torch.log(1 - p))  # [H, W]
-
+        entropy = - (mask_p * torch.log(mask_p + eps) + (1 - mask_p) * torch.log(1 - mask_p + eps))
+    
   
-        max_ent = torch.log(torch.tensor(2.0, device=p.device))
+        max_ent = torch.log(torch.tensor(2.0, device=mask_p.device))
         entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
-
-        entropy_maps.append(entropy_norm[0])
-
-
+                
+        entropy_maps.append(entropy_norm)
 
     return entropy_maps, masks_pred
         
@@ -338,36 +313,46 @@ def train_sam(
 
             slice_step = 50
             for j in range(0, len(gt_masks[0]), slice_step):
+             
                 
                 gt_masks_new = gt_masks[0][j:j+slice_step].unsqueeze(0)
                 prompts = get_prompts(cfg, bboxes_gt, gt_masks_new)
 
                 batch_size = images_weak.size(0)
 
+
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
                 entropy_maps = torch.stack(entropy_maps, dim=0).unsqueeze(0)
-                pred_stack = torch.stack(preds, dim=0)
-           
+
+
+                # print("LLLLLLLLLLLLLLLLL")
+                # plt.imshow(entropy_norm.cpu().numpy(), cmap='viridis')
+                # plt.show()
                               
-                pred_binary = ((pred_stack[0]* (1-entropy_maps[0])) >0.95).float() #* (1-entropy_maps[0]) #(pred_stack>0.95 ) & 
- 
+                pred_binary = ((preds[0]* (1-entropy_maps[0])) >0.5).float() #* (1-entropy_maps[0]) #(pred_stack>0.95 ) & 
+
+                
+                
+
                 overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
 
-
+             
                 bboxes = []
                 point_list = []
                 point_labels_list = []
-                
+
                
                 for i,  pred in enumerate( preds[0]):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
                   
-                    pred_w_overlap = (pred[0]>0.95) * invert_overlap_map
+                    pred_without_overlap = (pred) * invert_overlap_map
+              
                     
-                    ys, xs = torch.where(pred_w_overlap> 0.5)
+                    
+                    ys, xs = torch.where(pred_without_overlap> 0.5)
                     if len(xs) > 0 and len(ys) > 0:
                         x_min, x_max = xs.min().item(), xs.max().item()
                         y_min, y_max = ys.min().item(), ys.max().item()
@@ -387,14 +372,14 @@ def train_sam(
                 bboxes = torch.stack(bboxes)
 
                 with torch.no_grad():
-                    embeddings, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                    embeddings, soft_masks_logit, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                    
   
                 _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
                 del _
 
 
-              
-
+                
                 num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
                 loss_focal = torch.tensor(0., device=fabric.device)
                 loss_dice = torch.tensor(0., device=fabric.device)
@@ -489,7 +474,7 @@ def train_sam(
                     f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
                     f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                 )
-            if (iter+1) % 700 == 0:
+            if (iter+1) % eval_interval == 0:
                 val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
                 status = ""
@@ -602,11 +587,11 @@ def main(cfg: Box) -> int:
         #     model.load_state_dict(state)
         # fabric.print(f"Auto-resumed from: {auto_ckpt}")
     init_iou = 0
-    print('-'*100)
-    print('\033[92mDirect test on the original SAM.\033[0m') 
-    init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
-    print('-'*100)
-    del _     
+    # print('-'*100)
+    # print('\033[92mDirect test on the original SAM.\033[0m') 
+    # init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
+    # print('-'*100)
+    # del _     
 
 
 
