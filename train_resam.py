@@ -198,9 +198,11 @@ def train_sam(
             del data
 
             slice_step = 50
+            
             for j in range(0, len(gt_masks[0]), slice_step):
              
                 gt_masks_new = gt_masks[0][j:j+slice_step].unsqueeze(0)
+
                 prompts = get_prompts(cfg, bboxes_gt, gt_masks_new)
 
                 batch_size = images_weak.size(0)
@@ -214,6 +216,9 @@ def train_sam(
                 overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
+
+
+                
 
              
                 bboxes = []
@@ -249,7 +254,7 @@ def train_sam(
                 with torch.no_grad():
                     embeddings, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
                     
-                _, pred_masks, iou_predictions, _= model(images_weak, new_prompts)
+                _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
                 del _
 
 
