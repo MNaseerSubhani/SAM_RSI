@@ -285,6 +285,8 @@ def train_sam(
                                 eps=eps
                             )  # shape [N, N]
 
+
+
                             # Remove self-similarity bias
                             num = features.size(0)
                             mask = (1 - torch.eye(num, device=features.device))
@@ -304,22 +306,32 @@ def train_sam(
 
                         else:
                             loss_sim = torch.tensor(0.0, device=embeddings.device)
-
+                        
+                        
                         soft_mask = (soft_mask > 0).float()
+                        
+                        
                         # print(soft_mask.mean(), gt_masks_new[i].mean())
+                       
+                        # plt.imshow(pred_mask[0].detach().cpu().numpy(), cmap='viridis')
+                        # plt.show()
+                        # plt.imshow(soft_mask[0].detach().cpu().numpy(), cmap='viridis')
+                        # plt.show()
+
+                       
 
                         # Apply entropy mask to losses
-                        loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
-                        loss_dice += dice_loss(pred_mask, soft_mask)   #, entropy_mask=entropy_mask
+                        loss_focal += focal_loss(pred_mask, soft_mask, num_masks)  #, entropy_mask=entropy_mask
+                        loss_dice += dice_loss(pred_mask, soft_mask, num_masks)   #, entropy_mask=entropy_mask
                         batch_iou = calc_iou(pred_mask, soft_mask)
                         loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
-
+                     
                         if len(embedding_queue) > window_size:
                             embedding_queue.pop(0)
             
                 del  pred_masks, iou_predictions 
             
-                loss_total =   loss_focal #+  loss_dice  + loss_iou + 0.1*loss_sim #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_sim #+ loss_iou  +  +
 
                 
 
