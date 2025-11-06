@@ -57,7 +57,7 @@ def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
         _, masks_pred, _, _ = model(img_tensor, prompt)
 
-    # masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
+    masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
     entropy_maps = []
     eps = 1e-8
     for mask_p in masks_pred[0]:  # or just masks_pred if it's already a list
@@ -314,7 +314,8 @@ def train_sam(
                             loss_sim = torch.tensor(0.0, device=embeddings.device)
                         
                       
-                        soft_mask = (soft_mask > 0).float()
+                        # soft_mask = (soft_mask > 0).float()
+                        soft_mask = torch.sigmoid(soft_mask)
                         
                         
                         # print(soft_mask.mean(), gt_masks_new[i].mean())
