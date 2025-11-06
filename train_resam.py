@@ -76,7 +76,7 @@ def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
         _, masks_pred, _, _ = model(img_tensor, prompt)
     entropy_maps = []
-    pred_ins = []
+    # pred_ins = []
     eps = 1e-8
     for i, mask_p in enumerate( masks_pred[0]):
         mask_p = torch.sigmoid(mask_p)
@@ -90,9 +90,9 @@ def process_forward(img_tensor, prompt, model):
         entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
 
         entropy_maps.append(entropy_norm)
-        pred_ins.append(p)
+        # pred_ins.append(p)
 
-    return entropy_maps, pred_ins
+    return entropy_maps, masks_pred
 
 def entropy_map_calculate(p):
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
@@ -467,11 +467,11 @@ def train_sam(
 
                 batch_size = images_weak.size(0)
 
-                entropy_maps, preds = process_forward(images_weak, prompts, model)
+                entropy_maps, pred_stack = process_forward(images_weak, prompts, model)
                 entropy_maps = torch.stack(entropy_maps, dim=0)
-                pred_stack = torch.stack(preds, dim=0)
+                # pred_stack = torch.stack(preds, dim=0)
             
-                pred_binary = (((1- entropy_maps)>0.75)).float()   #*(1-entropy_maps)
+                pred_binary = ((pred_stack>0) * ((1- entropy_maps)>0.75)).float()   #*(1-entropy_maps)
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
