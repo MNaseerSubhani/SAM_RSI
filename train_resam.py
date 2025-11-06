@@ -55,9 +55,9 @@ def _find_latest_checkpoint(save_dir):
 
 def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
-        _, logits, _, _ = model(img_tensor, prompt)
+        _, masks_pred, _, _ = model(img_tensor, prompt)
 
-    masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
+    # masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
     entropy_maps = []
     eps = 1e-8
     for mask_p in masks_pred[0]:  # or just masks_pred if it's already a list
@@ -210,8 +210,8 @@ def train_sam(
 
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
                 entropy_maps = torch.stack(entropy_maps, dim=0).unsqueeze(0)
-                              
-                pred_binary = ((preds[0]* (1-entropy_maps[0])) >0.5).float() #* (1-entropy_maps[0]) #(pred_stack>0.95 ) & 
+
+                pred_binary = ((preds[0]* (1-entropy_maps[0])) >0.95).float() #* (1-entropy_maps[0]) #(pred_stack>0.95 ) & 
 
                 overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
@@ -229,6 +229,7 @@ def train_sam(
                 for i,  pred in enumerate( preds[0]):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
+
                   
                     pred_without_overlap = (pred>0.95) * invert_overlap_map
               
@@ -312,7 +313,7 @@ def train_sam(
                         else:
                             loss_sim = torch.tensor(0.0, device=embeddings.device)
                         
-                        
+                      
                         soft_mask = (soft_mask > 0).float()
                         
                         
