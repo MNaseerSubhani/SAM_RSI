@@ -55,7 +55,7 @@ def _find_latest_checkpoint(save_dir):
 
 def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
-        _, masks_pred, _, _ = model(img_tensor, prompt)
+        _, logits, _, _ = model(img_tensor, prompt)
 
     masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
     entropy_maps = []
