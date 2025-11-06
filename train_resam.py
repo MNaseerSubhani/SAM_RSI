@@ -320,10 +320,10 @@ def train_sam(
                         
                         # print(soft_mask.mean(), gt_masks_new[i].mean())
                        
-                        plt.imshow(pred_mask[0].detach().cpu().numpy(), cmap='viridis')
-                        plt.show()
-                        plt.imshow(soft_mask[0].detach().cpu().numpy(), cmap='viridis')
-                        plt.show()
+                        # plt.imshow(pred_mask[0].detach().cpu().numpy(), cmap='viridis')
+                        # plt.show()
+                        # plt.imshow(soft_mask[0].detach().cpu().numpy(), cmap='viridis')
+                        # plt.show()
 
                        
 
