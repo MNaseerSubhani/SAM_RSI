@@ -371,7 +371,7 @@ def train_sam(
                 val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
                 status = ""
-                if val_iou > best_iou:  #best_iou
+                if val_iou > 0:  #best_iou
                     best_iou = val_iou
                     best_state = copy.deepcopy(model.state_dict())
                     torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
