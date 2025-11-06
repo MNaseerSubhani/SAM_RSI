@@ -229,7 +229,7 @@ def train_sam(
                 point_labels_list = []
 
                
-                for i,  pred in enumerate( preds):
+                for i,  pred in enumerate( preds[0]):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
@@ -337,7 +337,7 @@ def train_sam(
             
                 del  pred_masks, iou_predictions 
             
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_sim#+ loss_iou  +  +
+                loss_total =  5 * loss_focal +  loss_dice  #+ loss_iou + 0.1*loss_sim#+ loss_iou  +  +
 
                 
 
