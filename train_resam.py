@@ -53,24 +53,44 @@ def _find_latest_checkpoint(save_dir):
     return ckpt_files[0]
 
 
-def process_forward(img_tensor, prompt, model):
-    with torch.no_grad():
-        _, logits, _, _ = model(img_tensor, prompt)
+# def process_forward(img_tensor, prompt, model):
+#     with torch.no_grad():
+#         _, logits, _, _ = model(img_tensor, prompt)
 
-    masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
-    entropy_maps = []
-    eps = 1e-8
-    for mask_p in masks_pred[0]:  # or just masks_pred if it's already a list
-        # Entropy per pixel
-        entropy = - (mask_p * torch.log(mask_p + eps) + (1 - mask_p) * torch.log(1 - mask_p + eps))
+#     masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
+#     entropy_maps = []
+#     eps = 1e-8
+#     for mask_p in masks_pred[0]:  # or just masks_pred if it's already a list
+#         # Entropy per pixel
+#         entropy = - (mask_p * torch.log(mask_p + eps) + (1 - mask_p) * torch.log(1 - mask_p + eps))
     
   
-        max_ent = torch.log(torch.tensor(2.0, device=mask_p.device))
-        entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
+#         max_ent = torch.log(torch.tensor(2.0, device=mask_p.device))
+#         entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
                 
-        entropy_maps.append(entropy_norm)
+#         entropy_maps.append(entropy_norm)
 
-    return entropy_maps, masks_pred
+#     return entropy_maps, masks_pred
+
+def process_forward(img_tensor, prompt, model):
+    with torch.no_grad():
+        _, masks_pred, _, _ = model(img_tensor, prompt)
+    entropy_maps = []
+    pred_ins = []
+    eps = 1e-8
+  
+    for i, mask_p in enumerate( masks_pred[0]):
+
+        p = mask_p.clamp(1e-6, 1 - 1e-6)
+        if p.ndim == 2:
+            p = p.unsqueeze(0)
+
+        entropy = - (p * torch.log(p + eps) + (1 - p) * torch.log(1 - p + eps))
+        entropy_maps.append(entropy)
+        pred_ins.append(p[0])
+
+    return entropy_maps, pred_ins
+
         
 def configure_opt(cfg: Box, model: Model):
 
@@ -211,17 +231,16 @@ def train_sam(
 
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
                 entropy_maps = torch.stack(entropy_maps, dim=0).unsqueeze(0)
+                preds = torch.stack(preds, dim=0).unsqueeze(0)
                 
 
-                pred_binary = ((preds[0]) >0.99) * (1-entropy_maps[0]).float()    #(1-entropy_maps[0]
+                pred_binary = ((preds[0] >0.95)).float()    #( * (1-entropy_maps[0])
 
                 overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
 
-                # print(preds.shape)
-                # print(invert_overlap_map.mean())
-                
+        
 
              
                 bboxes = []
@@ -234,7 +253,7 @@ def train_sam(
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
                   
-                    pred_without_overlap = (pred>0.99) * invert_overlap_map
+                    pred_without_overlap = (pred>0.95) * invert_overlap_map
               
                     ys, xs = torch.where(pred_without_overlap> 0.5)
                     if len(xs) > 0 and len(ys) > 0:
@@ -337,7 +356,7 @@ def train_sam(
             
                 del  pred_masks, iou_predictions 
             
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 10*loss_sim#+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_sim#+ loss_iou  +  +
 
                 
 
