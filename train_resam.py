@@ -498,7 +498,7 @@ def train_sam(
                
 
             
-                pred_binary = ((pred_stack[0]>0.95)* ((1- entropy_maps)>0.75) ).float()   #* ((1- entropy_maps)>0.75)
+                pred_binary = ((pred_stack[0]>0.95) ).float()   #* ((1- entropy_maps)>0.75)
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
