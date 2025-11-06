@@ -55,9 +55,9 @@ def _find_latest_checkpoint(save_dir):
 
 def process_forward(img_tensor, prompt, model):
     with torch.no_grad():
-        _, masks_pred, _, _ = model(img_tensor, prompt)
+        _, logits, _, _ = model(img_tensor, prompt)
 
-    # masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
+    masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
     entropy_maps = []
     eps = 1e-8
     for mask_p in masks_pred[0]:  # or just masks_pred if it's already a list
@@ -211,16 +211,16 @@ def train_sam(
 
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
                 entropy_maps = torch.stack(entropy_maps, dim=0).unsqueeze(0)
-                preds = torch.stack(preds, dim=0)
+                
 
-                pred_binary = ((preds[0]) >0.95).float()    #(1-entropy_maps[0]
+                pred_binary = ((preds[0]) >0.99) * (1-entropy_maps[0]).float()    #(1-entropy_maps[0]
 
                 overlap_count = pred_binary.sum(dim=0)  
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
 
                 # print(preds.shape)
-                # print(invert_overlap_map.shape)
+                # print(invert_overlap_map.mean())
                 
 
              
@@ -229,12 +229,12 @@ def train_sam(
                 point_labels_list = []
 
                
-                for i,  pred in enumerate( preds[0]):
+                for i,  pred in enumerate( preds):
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
                   
-                    pred_without_overlap = (pred>0.95) * invert_overlap_map
+                    pred_without_overlap = (pred>0.99) * invert_overlap_map
               
                     ys, xs = torch.where(pred_without_overlap> 0.5)
                     if len(xs) > 0 and len(ys) > 0:
@@ -317,15 +317,12 @@ def train_sam(
                         
                       
                         soft_mask = (soft_mask > 0).float()
-                        # soft_mask = torch.sigmoid(soft_mask)
-                        
-                        
-                        # print(soft_mask.mean(), gt_masks_new[i].mean())
+              
                        
-                        # plt.imshow(pred_mask[0].detach().cpu().numpy(), cmap='viridis')
-                        # plt.show()
-                        # plt.imshow(soft_mask[0].detach().cpu().numpy(), cmap='viridis')
-                        # plt.show()
+                        plt.imshow(pred_mask[1].detach().cpu().numpy(), cmap='viridis')
+                        plt.show()
+                        plt.imshow(soft_mask[1].detach().cpu().numpy(), cmap='viridis')
+                        plt.show()
 
                        
 
