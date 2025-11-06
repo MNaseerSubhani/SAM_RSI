@@ -471,7 +471,7 @@ def train_sam(
                 entropy_maps = torch.stack(entropy_maps, dim=0)
                 pred_stack = torch.stack(preds, dim=0)
             
-                pred_binary = (((1- entropy_maps)>0.9)).float()   #*(1-entropy_maps)
+                pred_binary = (((1- entropy_maps)>0.5)).float()   #*(1-entropy_maps)
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
@@ -526,6 +526,8 @@ def train_sam(
                 loss_focal = torch.tensor(0., device=fabric.device)
                 loss_dice = torch.tensor(0., device=fabric.device)
                 loss_iou = torch.tensor(0., device=fabric.device)
+             
+
 
                 for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
                         zip(pred_masks, soft_masks, iou_predictions  )
@@ -538,9 +540,9 @@ def train_sam(
                         batch_iou = calc_iou(pred_mask, soft_mask)
                         loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
 
-                        # plt.imshow(pred_mask[2].detach().cpu().numpy(), cmap='viridis')
+                        # plt.imshow(pred_mask[0].detach().cpu().numpy(), cmap='viridis')
                         # plt.show()
-                        # plt.imshow(soft_mask[2].detach().cpu().numpy(), cmap='viridis')
+                        # plt.imshow(soft_mask[0].detach().cpu().numpy(), cmap='viridis')
                         # plt.show()
 
 
