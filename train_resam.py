@@ -623,19 +623,38 @@ def train_sam(
             
                 del loss_dice, loss_iou, loss_focal
 
-            if (iter+1) %match_interval==0:
-                fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
-                             f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
-                             f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
-                             f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
-                             f' | Dice Loss [{dice_losses.val:.4f} ({dice_losses.avg:.4f})]'
-                             f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
-                             f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
+            if (iter+1) % match_interval==0:
+                fabric.print(
+                    f"Epoch [{epoch}] Iter [{iter + 1}/{len(train_dataloader)}] "
+                    f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
+                    f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
+                )
+            if (iter+1) % eval_interval == 0:
+                val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
-            if (iter+1)%100 == 0:
-                iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-                del iou
-            torch.cuda.empty_cache()
+                status = ""
+                if val_iou > 0:  #best_iou
+                    best_iou = val_iou
+                    best_state = copy.deepcopy(model.state_dict())
+                    torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
+                    status = "Improved → Model Saved"
+                    no_improve_count = 0
+                else:
+                    model.load_state_dict(best_state)
+                    no_improve_count += 1
+                    status = f"Rollback ({no_improve_count})"
+
+                # Write log entry
+                with open(csv_path, "a", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([epoch, iter + 1, val_iou, best_iou, status])
+
+                fabric.print(f"Validation IoU={val_iou:.4f} | Best={best_iou:.4f} | {status}")
+
+                # Stop if model fails to stabilize
+                if no_improve_count >= max_patience:
+                    fabric.print(f"Training stopped early after {no_improve_count} failed rollbacks.")
+                    return
             
   
 
