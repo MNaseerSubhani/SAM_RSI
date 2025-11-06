@@ -78,13 +78,14 @@ def process_forward(img_tensor, prompt, model):
     entropy_maps = []
     pred_ins = []
     for i, mask_p in enumerate( masks_pred[0]):
+        mask_p = torch.sigmoid(mask_p)
 
         p = mask_p.clamp(1e-6, 1 - 1e-6)
         if p.ndim == 2:
             p = p.unsqueeze(0)
 
-        # entropy_map = entropy_map_calculate(p)
-        # entropy_maps.append(entropy_map)
+        entropy_map = entropy_map_calculate(p)
+        entropy_maps.append(entropy_map)
         pred_ins.append(p)
 
     return entropy_maps, pred_ins
@@ -428,6 +429,7 @@ def train_sam(
     scheduler: _FabricOptimizer,
     train_dataloader: DataLoader,
     val_dataloader: DataLoader,
+    init_iou
 ):
     # collected = sort_entropy_(model, target_pts)
     focal_loss = FocalLoss()
@@ -452,17 +454,18 @@ def train_sam(
             images_weak, images_strong, bboxes, gt_masks, img_paths= data
             del data
 
-
-            for i in range(0, len(gt_masks[0]), 50):
+            slice_step = 50
+        
+            for j in range(0, len(gt_masks[0]), slice_step):
                 
-                gt_masks_new = gt_masks[0][i:i+10].unsqueeze(0)
+                gt_masks_new = gt_masks[0][j:j+slice_step].unsqueeze(0)
                 prompts = get_prompts(cfg, bboxes, gt_masks_new)
 
                 batch_size = images_weak.size(0)
 
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
                 pred_stack = torch.stack(preds, dim=0)
-                pred_binary = (pred_stack > 0.99).float() 
+                pred_binary = (pred_stack > 0.5).float() 
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
@@ -482,7 +485,7 @@ def train_sam(
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
                
-                    pred = (pred[0]>0.99)
+                    pred = (pred[0]>0.5)
                     pred_w_overlap = pred * invert_overlap_map[0]
 
 
@@ -649,7 +652,7 @@ def main(cfg: Box) -> int:
 
 
 
-    train_sam(cfg, fabric, model, optimizer, scheduler, train_data, val_data)
+    train_sam(cfg, fabric, model, optimizer, scheduler, train_data, val_data, init_iou)
 
     del model, train_data, val_data
 
