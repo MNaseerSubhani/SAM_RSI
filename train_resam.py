@@ -503,7 +503,7 @@ def train_sam(
                         point_list.append(point_coords)
                         point_labels_list.append(point_coords_lab)
                 if len(bboxes) == 0:
-#                     continue  # skip if no valid region
+                    continue  # skip if no valid region
                   
                         
                         
