@@ -337,7 +337,7 @@ def train_sam(
             
                 del  pred_masks, iou_predictions 
             
-                loss_total =  5 * loss_focal +  loss_dice  #+ loss_iou + 0.1*loss_sim#+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 10*loss_sim#+ loss_iou  +  +
 
                 
 
