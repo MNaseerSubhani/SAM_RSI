@@ -23,7 +23,7 @@ from lightning.fabric.fabric import _FabricOptimizer
 from box import Box
 from datasets import call_load_dataset
 from utils.model import Model
-from utils.losses import DiceLoss, FocalLoss, Matching_Loss
+from utils.losses import DiceLoss, FocalLoss, Matching_Loss, cosine_similarity
 from utils.eval_utils import AverageMeter, validate, get_prompts, calc_iou, validate_sam2
 from utils.tools import copy_model, create_csv, reduce_instances
 from utils.utils import *
@@ -266,8 +266,6 @@ def train_sam(
                 loss_iou = torch.tensor(0., device=fabric.device)
                 loss_sim = torch.tensor(0., device=fabric.device)
 
-                
-
                 for i, (pred_mask, soft_mask, iou_prediction, bbox) in enumerate(
                         zip(pred_masks, soft_masks, iou_predictions, bboxes  )
                     ):  
@@ -278,7 +276,7 @@ def train_sam(
                         loss_match = 0
                         
                        
-                        if len(embedding_queue) > 1:
+                        if len(embedding_queue) > -1:
                             # Stack all embeddings (num_instances, feature_dim)
                             features = torch.stack(embedding_queue, dim=0)  # [N, D]
                             eps = 1e-8
@@ -312,6 +310,7 @@ def train_sam(
 
                         else:
                             loss_sim = torch.tensor(0.0, device=embeddings.device)
+                        print(loss_sim)
                         
                       
                         # soft_mask = (soft_mask > 0).float()
@@ -320,10 +319,10 @@ def train_sam(
                         
                         # print(soft_mask.mean(), gt_masks_new[i].mean())
                        
-                        # plt.imshow(pred_mask[0].detach().cpu().numpy(), cmap='viridis')
-                        # plt.show()
-                        # plt.imshow(soft_mask[0].detach().cpu().numpy(), cmap='viridis')
-                        # plt.show()
+                        plt.imshow(pred_mask[0].detach().cpu().numpy(), cmap='viridis')
+                        plt.show()
+                        plt.imshow(soft_mask[0].detach().cpu().numpy(), cmap='viridis')
+                        plt.show()
 
                        
 
@@ -338,7 +337,7 @@ def train_sam(
             
                 del  pred_masks, iou_predictions 
             
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_sim #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 4*loss_sim #+ loss_iou  +  +
 
                 
 
