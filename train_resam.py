@@ -287,7 +287,7 @@ def train_sam(
                 loss_dice = torch.tensor(0., device=fabric.device)
                 loss_iou = torch.tensor(0., device=fabric.device)
                 loss_sim = torch.tensor(0., device=fabric.device)
-
+               
                 for i, (pred_mask, soft_mask, iou_prediction, bbox) in enumerate(
                         zip(pred_masks, soft_masks, iou_predictions, bboxes  )
                     ):  
@@ -348,7 +348,7 @@ def train_sam(
                         # Apply entropy mask to losses
                         loss_focal += focal_loss(pred_mask, soft_mask,num_masks)  #, entropy_mask=entropy_mask
                         loss_dice += dice_loss(pred_mask, soft_mask,num_masks)   #, entropy_mask=entropy_mask
-                        batch_iou = calc_iou(pred_mask, soft_mask,num_masks )
+                        batch_iou = calc_iou(pred_mask, soft_mask )
                         loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
                      
                         if len(embedding_queue) > window_size:
