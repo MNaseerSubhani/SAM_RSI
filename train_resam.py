@@ -165,7 +165,8 @@ def train_sam(
     match_interval = cfg.match_interval
     eval_interval = int(len(train_dataloader) * 1)
 
-    window_size = 100
+    window_size = 128
+
     embedding_queue = []
     ite_em = 0
 
@@ -310,11 +311,11 @@ def train_sam(
 
                         else:
                             loss_sim = torch.tensor(0.0, device=embeddings.device)
-                        print(loss_sim)
+                        # print(loss_sim)
                         
                       
-                        # soft_mask = (soft_mask > 0).float()
-                        soft_mask = torch.sigmoid(soft_mask)
+                        soft_mask = (soft_mask > 0).float()
+                        # soft_mask = torch.sigmoid(soft_mask)
                         
                         
                         # print(soft_mask.mean(), gt_masks_new[i].mean())
