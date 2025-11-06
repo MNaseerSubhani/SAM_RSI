@@ -272,6 +272,7 @@ def train_sam(
                 for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
                         zip(pred_masks, soft_masks, iou_predictions  )
                     ):
+                        print("KKKKK")
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
                         loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
