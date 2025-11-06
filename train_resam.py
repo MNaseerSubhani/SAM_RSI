@@ -621,7 +621,7 @@ def train_sam(
                 torch.cuda.empty_cache()
 
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + loss_sim#+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_sim#+ loss_iou  +  +
 
 
 
