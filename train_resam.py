@@ -438,6 +438,9 @@ def train_sam(
     # collected = sort_entropy_(model, target_pts)
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
+    window_size = 128
+
+    embedding_queue = []
     max_iou = 0.
     match_interval = cfg.match_interval
 
@@ -449,6 +452,7 @@ def train_sam(
         iou_losses = AverageMeter()
         total_losses = AverageMeter()
         match_losses = AverageMeter()
+        sim_losses = AverageMeter()
         end = time.time()
         num_iter = len(train_dataloader)
 
@@ -518,10 +522,13 @@ def train_sam(
                 bboxes = torch.stack(bboxes)
 
                 with torch.no_grad():
-                    _, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                    embeddings, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
   
                 _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
                 del _
+
+                if isinstance(embeddings, dict):
+                    embeddings = embeddings['vision_features']  
 
                 torch.cuda.empty_cache()
 
@@ -533,7 +540,45 @@ def train_sam(
 
                 for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
                         zip(pred_masks, soft_masks, iou_predictions  )
-                    ):
+                    ):  
+                        embed_feats = get_bbox_feature( embeddings, bbox)
+                        embed_feats = F.normalize(embed_feats, p=2, dim=0)
+                        embedding_queue.append(embed_feats)
+
+                        if len(embedding_queue) > -1:
+                            # Stack all embeddings (num_instances, feature_dim)
+                            features = torch.stack(embedding_queue, dim=0)  # [N, D]
+                            eps = 1e-8
+
+                            # Compute cosine similarity matrix
+                            cos_sim_matrix = F.cosine_similarity(
+                                features.unsqueeze(1),  # [N, 1, D]
+                                features.unsqueeze(0),  # [1, N, D]
+                                dim=2,
+                                eps=eps
+                            )  # shape [N, N]
+
+
+
+                            # Remove self-similarity bias
+                            num = features.size(0)
+                            mask = (1 - torch.eye(num, device=features.device))
+                            cos_sim_matrix = cos_sim_matrix * mask
+
+                            # ---- Soft alignment (SSAL) ----
+                            # Step 1. Rescale cosine to [0,1]
+                            cos_sim_matrix = (cos_sim_matrix + 1) / 2
+
+                            # Step 2. Compute temperature-scaled soft distribution
+                            tau = 0.03  # you can tune in [0.03–0.1]
+                            sim_soft = torch.exp(cos_sim_matrix / tau)
+                            prob_matrix = sim_soft / (sim_soft.sum(dim=1, keepdim=True) + eps)
+
+                            # Step 3. Soft Semantic Alignment Loss
+                            loss_sim = ((1 - cos_sim_matrix) * prob_matrix).sum(dim=1).mean()
+
+                        else:
+                            loss_sim = torch.tensor(0.0, device=embeddings.device)
                        
                         soft_mask = (soft_mask > 0.).float()
                         # Apply entropy mask to losses
@@ -556,7 +601,7 @@ def train_sam(
                 torch.cuda.empty_cache()
 
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + loss_sim#+ loss_iou  +  +
 
 
 
