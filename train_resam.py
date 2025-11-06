@@ -314,8 +314,8 @@ def train_sam(
                             loss_sim = torch.tensor(0.0, device=embeddings.device)
                         
                       
-                        soft_mask = (soft_mask > 0).float()
-                        # soft_mask = torch.sigmoid(soft_mask)
+                        # soft_mask = (soft_mask > 0).float()
+                        soft_mask = torch.sigmoid(soft_mask)
                         
                         
                         # print(soft_mask.mean(), gt_masks_new[i].mean())
