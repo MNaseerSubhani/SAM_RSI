@@ -252,7 +252,7 @@ def train_sam(
                     point_coords = prompts[0][0][i][:].unsqueeze(0)
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
-                  
+               
                     pred_without_overlap = (pred>0.95) * invert_overlap_map
               
                     ys, xs = torch.where(pred_without_overlap> 0.5)
@@ -356,7 +356,7 @@ def train_sam(
             
                 del  pred_masks, iou_predictions 
             
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_sim#+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ 0.1*loss_sim#+ loss_iou  +  +
 
                 
 
