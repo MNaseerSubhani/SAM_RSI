@@ -77,22 +77,26 @@ def process_forward(img_tensor, prompt, model):
         _, masks_pred, _, _ = model(img_tensor, prompt)
     entropy_maps = []
     pred_ins = []
+    eps = 1e-8
     for i, mask_p in enumerate( masks_pred[0]):
         mask_p = torch.sigmoid(mask_p)
 
         p = mask_p.clamp(1e-6, 1 - 1e-6)
-        if p.ndim == 2:
-            p = p.unsqueeze(0)
+        # if p.ndim == 2:
+        #     p = p.unsqueeze(0)
 
-        entropy_map = entropy_map_calculate(p)
-        entropy_maps.append(entropy_map)
+        entropy = - (p * torch.log(p + eps) + (1 - p) * torch.log(1 - p + eps))
+        max_ent = torch.log(torch.tensor(2.0, device=mask_p.device))
+        entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
+
+        entropy_maps.append(entropy_norm)
         pred_ins.append(p)
 
     return entropy_maps, pred_ins
 
 def entropy_map_calculate(p):
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
-    entropy_map = entropy_map.max(dim=0)[0]
+    entropy_map = entropy_map.max(dim=0)
 
     return entropy_map
 
@@ -464,8 +468,10 @@ def train_sam(
                 batch_size = images_weak.size(0)
 
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
+                entropy_maps = torch.stack(entropy_maps, dim=0)
                 pred_stack = torch.stack(preds, dim=0)
-                pred_binary = (pred_stack > 0.5).float() 
+            
+                pred_binary = ((pred_stack > 0.5)*(1-entropy_maps)).float() 
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
@@ -475,8 +481,7 @@ def train_sam(
                 bboxes = []
                 point_list = []
                 point_labels_list = []
-               
-
+              
                 # print(len(entropy_maps))
                 point_list = []
                 point_labels_list = []
@@ -485,8 +490,8 @@ def train_sam(
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
                
-                    pred = (pred[0]>0.5)
-                    pred_w_overlap = pred * invert_overlap_map[0]
+                    pred = (pred>0.5)
+                    pred_w_overlap = pred * invert_overlap_map
 
 
                     ys, xs = torch.where(pred_w_overlap > 0.5)
