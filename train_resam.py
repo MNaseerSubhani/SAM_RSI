@@ -444,6 +444,26 @@ def train_sam(
     max_iou = 0.
     match_interval = cfg.match_interval
 
+    best_state = copy.deepcopy(model.state_dict())
+    no_improve_count = 0
+    max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
+    match_interval = cfg.match_interval
+    eval_interval = int(len(train_dataloader) * 1)
+
+    
+    ite_em = 0
+
+    # Prepare output dirs
+    os.makedirs(os.path.join(cfg.out_dir, "save"), exist_ok=True)
+    csv_path = os.path.join(cfg.out_dir, "training_log.csv")
+
+    # Initialize CSV
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Epoch", "Iteration", "Val_IoU", "Best_IoU", "Status"])
+
+
+
     for epoch in range(1, cfg.num_epochs + 1):
         batch_time = AverageMeter()
         data_time = AverageMeter()
