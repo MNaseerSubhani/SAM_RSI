@@ -538,8 +538,8 @@ def train_sam(
                 loss_iou = torch.tensor(0., device=fabric.device)
              
 
-                for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
-                        zip(pred_masks, soft_masks, iou_predictions  )
+                for i, (pred_mask, soft_mask, iou_prediction, bbox) in enumerate(
+                        zip(pred_masks, soft_masks, iou_predictions, bboxes  )
                     ):  
                         embed_feats = get_bbox_feature( embeddings, bbox)
                         embed_feats = F.normalize(embed_feats, p=2, dim=0)
