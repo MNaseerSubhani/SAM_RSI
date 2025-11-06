@@ -319,9 +319,9 @@ def train_sam(
                         soft_mask = (soft_mask > 0).float()
               
                        
-                        plt.imshow(pred_mask[1].detach().cpu().numpy(), cmap='viridis')
+                        plt.imshow(pred_mask[2].detach().cpu().numpy(), cmap='viridis')
                         plt.show()
-                        plt.imshow(soft_mask[1].detach().cpu().numpy(), cmap='viridis')
+                        plt.imshow(soft_mask[2].detach().cpu().numpy(), cmap='viridis')
                         plt.show()
 
                        
