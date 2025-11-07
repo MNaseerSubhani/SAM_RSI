@@ -1730,14 +1730,18 @@ def process_forward(img_tensor, prompt, model):
         _, masks_pred, _, _ = model(img_tensor, prompt)
     entropy_maps = []
     pred_ins = []
+    eps=1e-8
     for i, mask_p in enumerate( masks_pred[0]):
         mask_p = torch.sigmoid(mask_p)
         p = mask_p.clamp(1e-6, 1 - 1e-6)
         if p.ndim == 2:
             p = p.unsqueeze(0)
 
-        entropy_map = entropy_map_calculate(p)
-        entropy_maps.append(entropy_map)
+        # entropy_map = entropy_map_calculate(p)
+        entropy = - (p * torch.log(p + eps) + (1 - p) * torch.log(1 - p + eps))
+        max_ent = torch.log(torch.tensor(2.0, device=mask_p.device))
+        entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
+        entropy_maps.append(entropy_norm)
         pred_ins.append(p)
 
     return entropy_maps, pred_ins
