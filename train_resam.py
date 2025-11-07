@@ -1908,10 +1908,10 @@ def train_sam(
                         
 
                         soft_mask = (soft_mask > 0.).float()
-                        plt.imshow(pred_mask.detach().cpu().numpy(), cmap='viridis')
-                        plt.show()
-                        plt.imshow(soft_mask.detach().cpu().numpy(), cmap='viridis')
-                        plt.show()
+                        # plt.imshow(pred_mask.detach().cpu().numpy(), cmap='viridis')
+                        # plt.show()
+                        # plt.imshow(soft_mask.detach().cpu().numpy(), cmap='viridis')
+                        # plt.show()
                         # Apply entropy mask to losses
                         loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
                         loss_dice += dice_loss(pred_mask, soft_mask)   #, entropy_mask=entropy_mask
