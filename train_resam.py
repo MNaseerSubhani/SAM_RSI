@@ -1441,7 +1441,6 @@ def train_sam(
                 _, pred_masks, iou_predictions, _= model(images_strong, new_prompts)
                 del _
 
-                torch.cuda.empty_cache()
 
                 num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
                 loss_focal = torch.tensor(0., device=fabric.device)
