@@ -492,7 +492,7 @@ def train_sam(
                 batch_size = images_weak.size(0)
 
                 entropy_maps, preds = process_forward(images_weak, prompts, model)
-                # entropy_maps = torch.stack(entropy_maps, dim=0)
+            
                 pred_stack = torch.stack(preds, dim=0)
                 
                
@@ -621,7 +621,7 @@ def train_sam(
                 torch.cuda.empty_cache()
 
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + loss_sim#+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_sim#+ loss_iou  +  +
 
 
 
