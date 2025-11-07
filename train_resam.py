@@ -53,22 +53,27 @@ def _find_latest_checkpoint(save_dir):
     return ckpt_files[0]
 
 
+
+
 # def process_forward(img_tensor, prompt, model):
 #     with torch.no_grad():
-#         _, logits, _, _ = model(img_tensor, prompt)
-
-#     masks_pred = torch.sigmoid(torch.stack(logits, dim=0))
+#         _, masks_pred, _, _ = model(img_tensor, prompt)
 #     entropy_maps = []
+#     pred_ins = []
 #     eps = 1e-8
-#     for mask_p in masks_pred[0]:  # or just masks_pred if it's already a list
-#         # Entropy per pixel
-#         entropy = - (mask_p * torch.log(mask_p + eps) + (1 - mask_p) * torch.log(1 - mask_p + eps))
-    
-  
+#     for i, mask_p in enumerate( masks_pred[0]):
+#         mask_p = torch.sigmoid(mask_p)
+
+#         p = mask_p.clamp(1e-6, 1 - 1e-6)
+#         # if p.ndim == 2:
+#         #     p = p.unsqueeze(0)
+
+#         entropy = - (p * torch.log(p + eps) + (1 - p) * torch.log(1 - p + eps))
 #         max_ent = torch.log(torch.tensor(2.0, device=mask_p.device))
 #         entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
-                
+
 #         entropy_maps.append(entropy_norm)
+#         pred_ins.append(mask_p)
 
 #     return entropy_maps, masks_pred
 
@@ -77,23 +82,17 @@ def process_forward(img_tensor, prompt, model):
         _, masks_pred, _, _ = model(img_tensor, prompt)
     entropy_maps = []
     pred_ins = []
-    eps = 1e-8
     for i, mask_p in enumerate( masks_pred[0]):
-        mask_p = torch.sigmoid(mask_p)
 
         p = mask_p.clamp(1e-6, 1 - 1e-6)
-        # if p.ndim == 2:
-        #     p = p.unsqueeze(0)
+        if p.ndim == 2:
+            p = p.unsqueeze(0)
 
-        entropy = - (p * torch.log(p + eps) + (1 - p) * torch.log(1 - p + eps))
-        max_ent = torch.log(torch.tensor(2.0, device=mask_p.device))
-        entropy_norm = entropy / (max_ent + 1e-8)   # [0, 1]
+        entropy_map = entropy_map_calculate(p)
+        entropy_maps.append(entropy_map)
+        pred_ins.append(p)
 
-        entropy_maps.append(entropy_norm)
-        pred_ins.append(mask_p)
-
-    return entropy_maps, masks_pred
-
+    return entropy_maps, pred_ins
 def entropy_map_calculate(p):
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
     entropy_map = entropy_map.max(dim=0)
