@@ -1280,8 +1280,8 @@ def process_forward(img_tensor, prompt, model):
     for i, mask_p in enumerate( masks_pred[0]):
 
         p = mask_p.clamp(1e-6, 1 - 1e-6)
-        if p.ndim == 2:
-            p = p.unsqueeze(0)
+        # if p.ndim == 2:
+        #     p = p.unsqueeze(0)
 
         entropy_map = entropy_map_calculate(p)
         entropy_maps.append(entropy_map)
@@ -1394,6 +1394,8 @@ def train_sam(
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
 
+             
+
 
                 soft_masks = []
                 bboxes = []
@@ -1410,7 +1412,7 @@ def train_sam(
 
                     entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
                     
-                    pred = (pred[0]>0.99)
+                    pred = (pred>0.99)
                     pred_w_overlap = pred * invert_overlap_map[0]
 
 
@@ -1502,7 +1504,7 @@ def train_sam(
                              f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
                              f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
 
-            if (iter+1)%eval_interval == 0:
+            if (iter+1)%200 == 0:
                 iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
                 del iou
             torch.cuda.empty_cache()
