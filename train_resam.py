@@ -92,7 +92,7 @@ def process_forward(img_tensor, prompt, model):
         entropy_maps.append(entropy_norm)
         pred_ins.append(mask_p)
 
-    return entropy_maps, pred_ins
+    return entropy_maps, masks_pred
 
 def entropy_map_calculate(p):
     entropy_map = - (p * torch.log(p) + (1 - p) * torch.log(1 - p))
