@@ -1382,7 +1382,7 @@ def train_sam(
 
             for i in range(0, len(gt_masks[0]), 50):
                 
-                gt_masks_new = gt_masks[0][i:i+10].unsqueeze(0)
+                gt_masks_new = gt_masks[0][i:i+50].unsqueeze(0)
                 prompts = get_prompts(cfg, bboxes, gt_masks_new)
 
                 batch_size = images_weak.size(0)
