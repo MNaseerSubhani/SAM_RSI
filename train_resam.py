@@ -1954,7 +1954,7 @@ def train_sam(
                                 f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
                                 f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
 
-            if (iter+1)%100 == 0:
+            if (iter+1)%200 == 0:
                 iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
                 del iou
             torch.cuda.empty_cache()
