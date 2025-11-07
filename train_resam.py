@@ -494,8 +494,8 @@ def train_sam(
                 pred_stack = torch.stack(preds, dim=0)
                 entropy_maps = torch.stack(entropy_maps, dim=0)
                 
-                pred_binary = ((pred_stack) * (1- entropy_maps ))   #* ((1- entropy_maps)>0.75)
-                pred_binary = (pred_binary > 0.9).float()
+                # pred_binary = ((pred_stack) * (1- entropy_maps ))   #* ((1- entropy_maps)>0.75)
+                pred_binary = (pred_stack > 0.9).float()
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
@@ -649,29 +649,29 @@ def train_sam(
             if (iter+1) % 150 == 0:
                 val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
-                status = ""
-                if val_iou > 0:  #best_iou
-                    best_iou = val_iou
-                    best_state = copy.deepcopy(model.state_dict())
-                    torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
-                    status = "Improved → Model Saved"
-                    no_improve_count = 0
-                else:
-                    model.load_state_dict(best_state)
-                    no_improve_count += 1
-                    status = f"Rollback ({no_improve_count})"
+                # status = ""
+                # if val_iou > 0:  #best_iou
+                #     best_iou = val_iou
+                #     best_state = copy.deepcopy(model.state_dict())
+                #     torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
+                #     status = "Improved → Model Saved"
+                #     no_improve_count = 0
+                # else:
+                #     model.load_state_dict(best_state)
+                #     no_improve_count += 1
+                #     status = f"Rollback ({no_improve_count})"
 
-                # Write log entry
-                with open(csv_path, "a", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerow([epoch, iter + 1, val_iou, best_iou, status])
+                # # Write log entry
+                # with open(csv_path, "a", newline="") as f:
+                #     writer = csv.writer(f)
+                #     writer.writerow([epoch, iter + 1, val_iou, best_iou, status])
 
-                fabric.print(f"Validation IoU={val_iou:.4f} | Best={best_iou:.4f} | {status}")
+                # fabric.print(f"Validation IoU={val_iou:.4f} | Best={best_iou:.4f} | {status}")
 
-                # Stop if model fails to stabilize
-                if no_improve_count >= max_patience:
-                    fabric.print(f"Training stopped early after {no_improve_count} failed rollbacks.")
-                    return
+                # # Stop if model fails to stabilize
+                # if no_improve_count >= max_patience:
+                #     fabric.print(f"Training stopped early after {no_improve_count} failed rollbacks.")
+                #     return
             
   
 
