@@ -1457,10 +1457,10 @@ def train_sam(
                         batch_iou = calc_iou(pred_mask, soft_mask)
                         loss_iou += F.mse_loss(iou_prediction, batch_iou, reduction='sum') / num_masks
 
-                        plt.imshow(pred_mask[2].detach().cpu().numpy(), cmap='viridis')
-                        plt.show()
-                        plt.imshow(soft_mask[2].detach().cpu().numpy(), cmap='viridis')
-                        plt.show()
+                        # plt.imshow(pred_mask[2].detach().cpu().numpy(), cmap='viridis')
+                        # plt.show()
+                        # plt.imshow(soft_mask[2].detach().cpu().numpy(), cmap='viridis')
+                        # plt.show()
 
 
             
