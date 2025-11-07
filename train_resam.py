@@ -590,7 +590,7 @@ def train_sam(
                             cos_sim_matrix = (cos_sim_matrix + 1) / 2
 
                             # Step 2. Compute temperature-scaled soft distribution
-                            tau = 0.03  # you can tune in [0.03–0.1]
+                            tau = 0.05  # you can tune in [0.03–0.1]
                             sim_soft = torch.exp(cos_sim_matrix / tau)
                             prob_matrix = sim_soft / (sim_soft.sum(dim=1, keepdim=True) + eps)
 
@@ -611,9 +611,6 @@ def train_sam(
                         # plt.show()
                         # plt.imshow(soft_mask[0].detach().cpu().numpy(), cmap='viridis')
                         # plt.show()
-
-
-            
                 del  pred_masks, iou_predictions 
                 # loss_dist = loss_dist / num_masks
                 loss_dice = loss_dice #/ num_masks
