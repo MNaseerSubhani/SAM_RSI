@@ -516,7 +516,7 @@ def train_sam(
                     point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
                
-                    # pred = (pred)
+                    pred = (pred>0.9)
                     pred_w_overlap = pred * invert_overlap_map
 
 
