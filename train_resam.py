@@ -1834,11 +1834,12 @@ def train_sam(
             data_time.update(time.time() - end)
             images_weak, images_strong, bboxes, gt_masks, img_paths= data
             del data
-            prompts = get_prompts(cfg, bboxes, gt_masks)
+            
 
             for j in range(0, len(gt_masks[0]), 50):
                 
                 gt_masks_new = gt_masks[0][j:j+50].unsqueeze(0)
+                prompts = get_prompts(cfg, bboxes, gt_masks_new)
 
                 batch_size = images_weak.size(0)
 
