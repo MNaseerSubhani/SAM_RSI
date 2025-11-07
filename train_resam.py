@@ -1799,6 +1799,7 @@ def prompt_calibration(cfg, entrop_map, prompts, point_status):
     return new_prompts
 
 
+
 def train_sam(
     cfg: Box,
     fabric: L.Fabric,
@@ -1826,116 +1827,122 @@ def train_sam(
         end = time.time()
         num_iter = len(train_dataloader)
 
-        for iter, data in enumerate(train_dataloader):
 
+
+        for iter, data in enumerate(train_dataloader):
+            
             data_time.update(time.time() - end)
             images_weak, images_strong, bboxes, gt_masks, img_paths= data
             del data
             prompts = get_prompts(cfg, bboxes, gt_masks)
 
-            batch_size = images_weak.size(0)
-
-            entropy_maps, preds = process_forward(images_weak, prompts, model)
-            pred_stack = torch.stack(preds, dim=0)
-            pred_binary = (pred_stack > 0.99).float() 
-            overlap_count = pred_binary.sum(dim=0)
-            overlap_map = (overlap_count > 1).float()
-            invert_overlap_map = 1.0 - overlap_map
-
-
-            soft_masks = []
-            bboxes = []
-            for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
-                entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
-                entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
-                pred = (pred[0]>0.99)
-                pred_w_overlap = pred * invert_overlap_map[0]
-
-                ys, xs = torch.where(pred_w_overlap > 0.5)
-                if len(xs) > 0 and len(ys) > 0:
-                    x_min, x_max = xs.min().item(), xs.max().item()
-                    y_min, y_max = ys.min().item(), ys.max().item()
-                else:
-                    print("No 1s found in mask")
+            for j in range(0, len(gt_masks[0]), 50):
                 
-                bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
+                gt_masks_new = gt_masks[0][j:j+50].unsqueeze(0)
 
-            bboxes = torch.stack(bboxes)
+                batch_size = images_weak.size(0)
 
-            with torch.no_grad():
-                _, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                entropy_maps, preds = process_forward(images_weak, prompts, model)
+                pred_stack = torch.stack(preds, dim=0)
+                pred_binary = (pred_stack > 0.99).float() 
+                overlap_count = pred_binary.sum(dim=0)
+                overlap_map = (overlap_count > 1).float()
+                invert_overlap_map = 1.0 - overlap_map
+
+
+                soft_masks = []
+                bboxes = []
+                for i, (entr_map, pred) in enumerate(zip(entropy_maps, preds)):
+                    entr_norm = (entr_map - entr_map.min()) / (entr_map.max() - entr_map.min() + 1e-8)
+                    entr_vis = (entr_norm[0].cpu().numpy() * 255).astype(np.uint8)
+                    pred = (pred[0]>0.99)
+                    pred_w_overlap = pred * invert_overlap_map[0]
+
+                    ys, xs = torch.where(pred_w_overlap > 0.5)
+                    if len(xs) > 0 and len(ys) > 0:
+                        x_min, x_max = xs.min().item(), xs.max().item()
+                        y_min, y_max = ys.min().item(), ys.max().item()
+                    # else:
+                    #     print("No 1s found in mask")
+                    
+                    bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
+
+                bboxes = torch.stack(bboxes)
+
+                with torch.no_grad():
+                    _, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                
+
+                
+                
+                # soft_masks.append(pred_w_overlap)
+
+
+
+
+                _, pred_masks, iou_predictions, _= model(images_strong, prompts)
+                del _
+
+
+
             
-
             
-            
-            # soft_masks.append(pred_w_overlap)
-
-
-
-
-            _, pred_masks, iou_predictions, _= model(images_strong, prompts)
-            del _
-
+                num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
+                loss_focal = torch.tensor(0., device=fabric.device)
+                loss_dice = torch.tensor(0., device=fabric.device)
+                loss_iou = torch.tensor(0., device=fabric.device)
 
 
         
+
+                for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
+                        zip(pred_masks[0], soft_masks[0], iou_predictions[0]  )
+                    ):
+                    
         
-            num_masks = sum(len(pred_mask) for pred_mask in pred_masks)
-            loss_focal = torch.tensor(0., device=fabric.device)
-            loss_dice = torch.tensor(0., device=fabric.device)
-            loss_iou = torch.tensor(0., device=fabric.device)
+
+                        soft_mask = (soft_mask > 0.).float()
+                        # Apply entropy mask to losses
+                        loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
+                        loss_dice += dice_loss(pred_mask, soft_mask)   #, entropy_mask=entropy_mask
+                        batch_iou = calc_iou(pred_mask.unsqueeze(0), soft_mask.unsqueeze(0))
+                        loss_iou += F.mse_loss(iou_prediction.view(-1), batch_iou.view(-1), reduction='sum') / num_masks
+
+                del  pred_masks, iou_predictions 
+                # loss_dist = loss_dist / num_masks
+                loss_dice = loss_dice / num_masks
+                loss_focal = loss_focal / num_masks
 
 
-       
+    
 
-            for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
-                    zip(pred_masks[0], soft_masks[0], iou_predictions[0]  )
-                ):
-                   
-     
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
 
-                    soft_mask = (soft_mask > 0.).float()
-                    # Apply entropy mask to losses
-                    loss_focal += focal_loss(pred_mask, soft_mask)  #, entropy_mask=entropy_mask
-                    loss_dice += dice_loss(pred_mask, soft_mask)   #, entropy_mask=entropy_mask
-                    batch_iou = calc_iou(pred_mask.unsqueeze(0), soft_mask.unsqueeze(0))
-                    loss_iou += F.mse_loss(iou_prediction.view(-1), batch_iou.view(-1), reduction='sum') / num_masks
+                fabric.backward(loss_total)
 
-            del  pred_masks, iou_predictions 
-            # loss_dist = loss_dist / num_masks
-            loss_dice = loss_dice / num_masks
-            loss_focal = loss_focal / num_masks
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+                torch.cuda.empty_cache()
+                del  prompts, soft_masks
 
+                batch_time.update(time.time() - end)
+                end = time.time()
 
-   
+                focal_losses.update(loss_focal.item(), batch_size)
+                dice_losses.update(loss_dice.item(), batch_size)
+                iou_losses.update(loss_iou.item(), batch_size)
+                total_losses.update(loss_total.item(), batch_size)
+            
 
-            loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
-
-            fabric.backward(loss_total)
-
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
-            torch.cuda.empty_cache()
-            del  prompts, soft_masks
-
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            focal_losses.update(loss_focal.item(), batch_size)
-            dice_losses.update(loss_dice.item(), batch_size)
-            iou_losses.update(loss_iou.item(), batch_size)
-            total_losses.update(loss_total.item(), batch_size)
-          
-
-            if (iter+1) %match_interval==0:
-                fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
-                             f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
-                             f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
-                             f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
-                             f' | Dice Loss [{dice_losses.val:.4f} ({dice_losses.avg:.4f})]'
-                             f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
-                             f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
+                if (iter+1) %match_interval==0:
+                    fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
+                                f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
+                                f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
+                                f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
+                                f' | Dice Loss [{dice_losses.val:.4f} ({dice_losses.avg:.4f})]'
+                                f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
+                                f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
 
             if (iter+1)%100 == 0:
                 iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
