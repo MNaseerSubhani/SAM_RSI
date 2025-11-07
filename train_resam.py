@@ -1470,8 +1470,7 @@ def train_sam(
                 # loss_dist = loss_dist / num_masks
                 loss_dice = loss_dice #/ num_masks
                 loss_focal = loss_focal #/ num_masks
-                torch.cuda.empty_cache()
-
+         
 
                 loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
 
