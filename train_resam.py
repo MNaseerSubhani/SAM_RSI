@@ -1278,7 +1278,7 @@ def process_forward(img_tensor, prompt, model):
     entropy_maps = []
     pred_ins = []
     for i, mask_p in enumerate( masks_pred[0]):
-
+        print(mask_p.max(), mask_p.min(), mask_p.mean())
         p = mask_p.clamp(1e-6, 1 - 1e-6)
         # if p.ndim == 2:
         #     p = p.unsqueeze(0)
