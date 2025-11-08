@@ -926,10 +926,10 @@ def train_sam(
                     ):
 
                         embed_feats = get_bbox_feature( embeddings, bbox)
-                        embed_feats = F.normalize(embed_feats, p=2, dim=0)
+                        embed_feats = F.normalize(embed_feats, p=2, dim=1)
                         embedding_queue.append(embed_feats)
 
-                        if len(embedding_queue) > -1:
+                        if len(embedding_queue) > 1:
                             # Stack all embeddings (num_instances, feature_dim)
                             features = torch.stack(embedding_queue, dim=0)  # [N, D]
                             eps = 1e-8
