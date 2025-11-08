@@ -451,7 +451,7 @@ def train_sam(
                 loss_sim  = loss_sim
              
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou  + 0.1*loss_sim#+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou  #+ 0.1*loss_sim#+ loss_iou  +  +
 
                 fabric.backward(loss_total)
 
@@ -481,7 +481,7 @@ def train_sam(
                     _, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
                     avg_means = sum(entropy_means) / len(entropy_means)
                     status = ""
-                    if avg_means < best_ent:  #best_ent
+                    if avg_means < 1000:  #best_ent
                         best_ent = avg_means
                         best_state = copy.deepcopy(model.state_dict())
                         torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
@@ -566,7 +566,7 @@ def main(cfg: Box) -> int:
 
     
 
-    auto_ckpt = _find_latest_checkpoint(os.path.join(cfg.out_dir, "save"))
+    auto_ckpt = None#_find_latest_checkpoint(os.path.join(cfg.out_dir, "save"))
 
     
     if auto_ckpt is not None:
