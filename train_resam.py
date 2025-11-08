@@ -14,30 +14,30 @@
 # #     init_iou
 # # ):
 
-# #     focal_loss = FocalLoss()
-# #     dice_loss = DiceLoss()
-# #     best_iou = init_iou
-# #     best_state = copy.deepcopy(model.state_dict())
-# #     no_improve_count = 0
-# #     max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
-# #     match_interval = cfg.match_interval
-# #     eval_interval = int(len(train_dataloader) * 1)
+    # focal_loss = FocalLoss()
+    # dice_loss = DiceLoss()
+    # best_iou = init_iou
+    # best_state = copy.deepcopy(model.state_dict())
+    # no_improve_count = 0
+    # max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
+    # match_interval = cfg.match_interval
+    # eval_interval = int(len(train_dataloader) * 1)
 
-# #     window_size = 128
+    # window_size = 128
 
-# #     embedding_queue = []
-# #     ite_em = 0
+    # embedding_queue = []
+    # ite_em = 0
 
-# #     # Prepare output dirs
-# #     os.makedirs(os.path.join(cfg.out_dir, "save"), exist_ok=True)
-# #     csv_path = os.path.join(cfg.out_dir, "training_log.csv")
+    # # Prepare output dirs
+    # os.makedirs(os.path.join(cfg.out_dir, "save"), exist_ok=True)
+    # csv_path = os.path.join(cfg.out_dir, "training_log.csv")
 
-# #     # Initialize CSV
-# #     with open(csv_path, "w", newline="") as f:
-# #         writer = csv.writer(f)
-# #         writer.writerow(["Epoch", "Iteration", "Val_IoU", "Best_IoU", "Status"])
+    # # Initialize CSV
+    # with open(csv_path, "w", newline="") as f:
+    #     writer = csv.writer(f)
+    #     writer.writerow(["Epoch", "Iteration", "Val_IoU", "Best_IoU", "Status"])
 
-# #     fabric.print(f"Training with rollback enabled. Logging to: {csv_path}")
+    # fabric.print(f"Training with rollback enabled. Logging to: {csv_path}")
 
 
 # #     for epoch in range(1, cfg.num_epochs + 1):
@@ -806,8 +806,30 @@ def train_sam(
     # collected = sort_entropy_(model, target_pts)
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
-    max_iou = 0.
+    best_iou = init_iou
+    best_state = copy.deepcopy(model.state_dict())
+    no_improve_count = 0
+    max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
     match_interval = cfg.match_interval
+    eval_interval = int(len(train_dataloader) * 1)
+
+    window_size = 128
+
+    embedding_queue = []
+    ite_em = 0
+
+    # Prepare output dirs
+    os.makedirs(os.path.join(cfg.out_dir, "save"), exist_ok=True)
+    csv_path = os.path.join(cfg.out_dir, "training_log.csv")
+
+    # Initialize CSV
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Epoch", "Iteration", "Val_IoU", "Best_IoU", "Status"])
+
+    fabric.print(f"Training with rollback enabled. Logging to: {csv_path}")
+
+
 
     for epoch in range(1, cfg.num_epochs + 1):
         batch_time = AverageMeter()
@@ -818,6 +840,7 @@ def train_sam(
         total_losses = AverageMeter()
         match_losses = AverageMeter()
         end = time.time()
+        sim_losses = AverageMeter()
         num_iter = len(train_dataloader)
 
 
@@ -845,9 +868,13 @@ def train_sam(
                 invert_overlap_map = 1.0 - overlap_map
 
 
-                soft_masks = []
+
                 bboxes = []
+                point_list = []
+                point_labels_list = []
                 for i,  pred in enumerate( preds):
+                    point_coords = prompts[0][0][i][:].unsqueeze(0)
+                    point_coords_lab = prompts[0][1][i][:].unsqueeze(0)
 
                     pred = (pred[0]>0.9)
                     pred_w_overlap = pred * invert_overlap_map[0]
@@ -856,15 +883,23 @@ def train_sam(
                     if len(xs) > 0 and len(ys) > 0:
                         x_min, x_max = xs.min().item(), xs.max().item()
                         y_min, y_max = ys.min().item(), ys.max().item()
-                    # else:
-                    #     print("No 1s found in mask")
+
+                        bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
+
+                        point_list.append(point_coords)
+                        point_labels_list.append(point_coords_lab)
                     
-                    bboxes.append(torch.tensor([x_min, y_min , x_max, y_max], dtype=torch.float32))
+                if len(bboxes) == 0:
+                    continue  # skip if no valid region
+
+                point_ = torch.cat(point_list).squeeze(1)
+                point_labels_ = torch.cat(point_labels_list)
+                new_prompts = [(point_, point_labels_)]
 
                 bboxes = torch.stack(bboxes)
 
                 with torch.no_grad():
-                    _, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
+                    embeddings, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
                 
 
                 
@@ -881,13 +916,58 @@ def train_sam(
                 loss_focal = torch.tensor(0., device=fabric.device)
                 loss_dice = torch.tensor(0., device=fabric.device)
                 loss_iou = torch.tensor(0., device=fabric.device)
+                loss_sim = torch.tensor(0., device=fabric.device)
 
 
         
 
-                for i, (pred_mask, soft_mask, iou_prediction) in enumerate(
-                        zip(pred_masks[0], soft_masks[0], iou_predictions[0]  )
+                for i, (pred_mask, soft_mask, iou_prediction, bbox) in enumerate(
+                        zip(pred_masks[0], soft_masks[0], iou_predictions[0], bboxes  )
                     ):
+
+                        embed_feats = get_bbox_feature( embeddings, bbox)
+                        embed_feats = F.normalize(embed_feats, p=2, dim=0)
+                        embedding_queue.append(embed_feats)
+
+                        if len(embedding_queue) > -1:
+                            # Stack all embeddings (num_instances, feature_dim)
+                            features = torch.stack(embedding_queue, dim=0)  # [N, D]
+                            eps = 1e-8
+
+                            # Compute cosine similarity matrix
+                            cos_sim_matrix = F.cosine_similarity(
+                                features.unsqueeze(1),  # [N, 1, D]
+                                features.unsqueeze(0),  # [1, N, D]
+                                dim=2,
+                                eps=eps
+                            )  # shape [N, N]
+
+
+
+                            # Remove self-similarity bias
+                            num = features.size(0)
+                            mask = (1 - torch.eye(num, device=features.device))
+                            cos_sim_matrix = cos_sim_matrix * mask
+
+                            # ---- Soft alignment (SSAL) ----
+                            # Step 1. Rescale cosine to [0,1]
+                            cos_sim_matrix = (cos_sim_matrix + 1) / 2
+
+                            # Step 2. Compute temperature-scaled soft distribution
+                            tau = 0.07  # you can tune in [0.03–0.1]
+                            sim_soft = torch.exp(cos_sim_matrix / tau)
+                            prob_matrix = sim_soft / (sim_soft.sum(dim=1, keepdim=True) + eps)
+
+                            # Step 3. Soft Semantic Alignment Loss
+                            loss_sim = ((1 - cos_sim_matrix) * prob_matrix).sum(dim=1).mean()
+
+                        else:
+                            loss_sim = torch.tensor(0.0, device=embeddings.device)
+                        # print(loss_sim)
+
+
+
+
                         soft_mask = (soft_mask > 0.).float()
                         # plt.imshow(pred_mask.detach().cpu().numpy(), cmap='viridis')
                         # plt.show()
@@ -903,11 +983,11 @@ def train_sam(
                 # loss_dist = loss_dist / num_masks
                 loss_dice = loss_dice / num_masks
                 loss_focal = loss_focal / num_masks
-
+                loss_sim  = loss_sim/num_masks
 
     
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou #+ loss_iou  +  +
+                loss_total =  20 * loss_focal +  loss_dice  + loss_iou  + loss_sim#+ loss_iou  +  +
 
                 fabric.backward(loss_total)
 
@@ -924,29 +1004,41 @@ def train_sam(
                 dice_losses.update(loss_dice.item(), batch_size)
                 iou_losses.update(loss_iou.item(), batch_size)
                 total_losses.update(loss_total.item(), batch_size)
+                sim_losses.update(loss_sim.item(), batch_size)
             
 
-                if (iter+1) %match_interval==0:
-                    fabric.print(f'Epoch: [{epoch}][{iter + 1}/{len(train_dataloader)}]'
-                                f' | Time [{batch_time.val:.3f}s ({batch_time.avg:.3f}s)]'
-                                f' | Data [{data_time.val:.3f}s ({data_time.avg:.3f}s)]'
-                                f' | Focal Loss [{focal_losses.val:.4f} ({focal_losses.avg:.4f})]'
-                                f' | Dice Loss [{dice_losses.val:.4f} ({dice_losses.avg:.4f})]'
-                                f' | IoU Loss [{iou_losses.val:.4f} ({iou_losses.avg:.4f})]'
-                                f' | Total Loss [{total_losses.val:.4f} ({total_losses.avg:.4f})]')
+                if (iter+1) % match_interval==0:
+                    fabric.print(
+                        f"Epoch [{epoch}] Iter [{iter + 1}/{len(train_dataloader)}] "
+                        f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
+                        f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
+                    )
+                if (iter+1) % 100 == 0:
+                    val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
 
-            if (iter+1)%200 == 0:
-                iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-                del iou
-            torch.cuda.empty_cache()
-            
-        # if epoch % cfg.eval_interval == 0:
-        #     iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-        #     # if iou > max_iou:
-        #     #     state = {"model": model, "optimizer": optimizer}
-        #     #     fabric.save(os.path.join(cfg.out_dir, "save", "best-ckpt.pth"), state)
-        #     #     max_iou = iou
-        #     del iou   
+                    status = ""
+                    if val_iou > 0:  #best_iou
+                        best_iou = val_iou
+                        best_state = copy.deepcopy(model.state_dict())
+                        torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
+                        status = "Improved → Model Saved"
+                        no_improve_count = 0
+                    else:
+                        model.load_state_dict(best_state)
+                        no_improve_count += 1
+                        status = f"Rollback ({no_improve_count})"
+
+                    # Write log entry
+                    with open(csv_path, "a", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow([epoch, iter + 1, val_iou, best_iou, status])
+
+                    fabric.print(f"Validation IoU={val_iou:.4f} | Best={best_iou:.4f} | {status}")
+
+                    # Stop if model fails to stabilize
+                    if no_improve_count >= max_patience:
+                        fabric.print(f"Training stopped early after {no_improve_count} failed rollbacks.")
+                        return
 
 
 
@@ -979,52 +1071,6 @@ def corrupt_main(cfg):
         torch.cuda.empty_cache()
         main(cfg)
 
-
-
-# def main(cfg: Box) -> int:
-
-#     gpu_ids = [str(i) for i in range(torch.cuda.device_count())]
-#     num_devices = len(gpu_ids)
-#     fabric = L.Fabric(accelerator="auto",
-#                       devices=num_devices,
-#                       strategy="auto",
-#                       loggers=[TensorBoardLogger(cfg.out_dir)])
-#     fabric.launch()
-#     fabric.seed_everything(1337 + fabric.global_rank)
-
-#     if fabric.global_rank == 0:
-#         os.makedirs(os.path.join(cfg.out_dir, "save"), exist_ok=True)
-#         create_csv(os.path.join(cfg.out_dir, "metrics.csv"), csv_head=cfg.csv_keys)
-
-#     with fabric.device:
-#         model = Model(cfg)
-#         model.setup()
-
-#     load_datasets = call_load_dataset(cfg)
-#     train_data, val_data, pt_data = load_datasets(cfg, img_size=1024, return_pt = True)
-#     train_data = fabric._setup_dataloader(train_data)
-#     val_data = fabric._setup_dataloader(val_data)
-#     pt_data = fabric._setup_dataloader(pt_data)
-#     optimizer, scheduler = configure_opt(cfg, model)
-#     model, optimizer = fabric.setup(model, optimizer)
-
-#     if cfg.resume and cfg.model.ckpt is not None:
-#         full_checkpoint = fabric.load(cfg.model.ckpt)
-#         model.load_state_dict(full_checkpoint["model"])
-#         optimizer.load_state_dict(full_checkpoint["optimizer"])
-#     init_iou = 0
-#     # print('-'*100)
-#     # print('\033[92mDirect test on the original SAM.\033[0m') 
-#     # _, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
-#     # print('-'*100)
-#     # del _     
-
-
-
-    
-#     train_sam(cfg, fabric, model, optimizer, scheduler, train_data, val_data, init_iou)
-
-#     del model, train_data, val_data
 
 
 def main(cfg: Box) -> int:
