@@ -813,7 +813,7 @@ def train_sam(
     match_interval = cfg.match_interval
     eval_interval = int(len(train_dataloader) * 1)
 
-    window_size = 128
+    window_size = 30
 
     embedding_queue = []
     ite_em = 0
