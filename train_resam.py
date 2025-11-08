@@ -319,7 +319,7 @@ def train_sam(
 
     entropy_means = deque(maxlen=len(train_dataloader))
 
-
+    eps = 1e-8
     for epoch in range(1, cfg.num_epochs + 1):
         batch_time = AverageMeter()
         data_time = AverageMeter()
@@ -361,7 +361,7 @@ def train_sam(
 
 
 
-                entropy_means.append(entropy_maps.detach().mean().cpu().item())
+                
 
                 bboxes = []
                 point_list = []
@@ -394,13 +394,11 @@ def train_sam(
 
                 with torch.no_grad():
                     embeddings, soft_masks, _, _ = model(images_weak, bboxes.unsqueeze(0))
-                
 
-                
-                
-                # soft_masks.append(pred_w_overlap)
+                sof_mask_prob = torch.sigmoid(torch.stack(soft_masks, dim=0))
+                entropy_sm = - (sof_mask_prob * torch.log(sof_mask_prob + eps) + (1 - sof_mask_prob) * torch.log(1 - sof_mask_prob + eps))
 
-
+                entropy_means.append(entropy_sm.detach().mean().cpu().item())
 
 
                 _, pred_masks, iou_predictions, _= model(images_strong, prompts)
@@ -435,54 +433,6 @@ def train_sam(
                 for i, (pred_mask, soft_mask, iou_prediction, bbox) in enumerate(
                         zip(pred_masks[0], soft_masks[0], iou_predictions[0], bboxes  )
                     ):
-
-                        # embed_feats = get_bbox_feature( embeddings, bbox)
-                        
-                        # embed_feats = F.normalize(embed_feats, p=2, dim=0)
-
-                        # embedding_queue.append(embed_feats)
-
-                        
-
-                        # if len(embedding_queue) > 0:
-                        #     # Stack all embeddings (num_instances, feature_dim)
-                        #     features = torch.stack(embedding_queue, dim=0)  # [N, D]
-                        #     eps = 1e-8
-
-                        #     # Compute cosine similarity matrix
-                        #     # cos_sim_matrix = F.cosine_similarity(
-                        #     #     features.unsqueeze(1),  # [N, 1, D]
-                        #     #     features.unsqueeze(0),  # [1, N, D]
-                        #     #     dim=2,
-                        #     #     eps=eps
-                        #     # )  # shape [N, N]
-
-                        #     cos_sim_matrix = torch.mm(features, features.t())
-
-                        #     # Remove self-similarity bias
-                        #     num = features.size(0)
-                        #     mask = (1 - torch.eye(num, device=features.device))
-                        #     cos_sim_matrix = cos_sim_matrix * mask
-
-                        #     # ---- Soft alignment (SSAL) ----
-                        #     # Step 1. Rescale cosine to [0,1]
-                        #     cos_sim_matrix = (cos_sim_matrix + 1) / 2
-
-                        #     # Step 2. Compute temperature-scaled soft distribution
-                        #     tau = 0.07  # you can tune in [0.03–0.1]
-                        #     sim_soft = torch.exp(cos_sim_matrix / tau)
-                        #     prob_matrix = sim_soft / (sim_soft.sum(dim=1, keepdim=True) + eps)
-
-                        #     # Step 3. Soft Semantic Alignment Loss
-                        #     loss_sim = ((1 - cos_sim_matrix) * prob_matrix).sum(dim=1).mean()
-
-                        # else:
-                        #     loss_sim = torch.tensor(0.0, device=embeddings.device)
-                        # # print(loss_sim)
-
-
-
-
                         soft_mask = (soft_mask > 0.).float()
                         # plt.imshow(pred_mask.detach().cpu().numpy(), cmap='viridis')
                         # plt.show()
