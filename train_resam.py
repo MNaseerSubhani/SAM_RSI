@@ -294,7 +294,7 @@ def train_sam(
     # collected = sort_entropy_(model, target_pts)
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
-    best_iou = init_iou
+    best_ent = 1000000
     best_state = copy.deepcopy(model.state_dict())
     no_improve_count = 0
     max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
@@ -313,10 +313,11 @@ def train_sam(
     # Initialize CSV
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Epoch", "Iteration", "Val_IoU", "Best_IoU", "Status"])
+        writer.writerow(["Epoch", "Iteration", "Val_ent", "Best_ent", "Status"])
 
     fabric.print(f"Training with rollback enabled. Logging to: {csv_path}")
 
+    entropy_means = deque(maxlen=len(train_dataloader))
 
 
     for epoch in range(1, cfg.num_epochs + 1):
@@ -330,14 +331,16 @@ def train_sam(
         end = time.time()
         sim_losses = AverageMeter()
         num_iter = len(train_dataloader)
+        entropy_means.clear()
 
-
+        
 
         for iter, data in enumerate(train_dataloader):
             
             data_time.update(time.time() - end)
             images_weak, images_strong, bboxes, gt_masks, img_paths= data
             del data
+
             
             step_size = 50
             for j in range(0, len(gt_masks[0]), step_size):
@@ -357,6 +360,8 @@ def train_sam(
                 invert_overlap_map = 1.0 - overlap_map
 
 
+
+                entropy_means.append(entropy_maps.detach().mean().cpu().item())
 
                 bboxes = []
                 point_list = []
@@ -523,11 +528,11 @@ def train_sam(
                         f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                     )
                 if (iter+1) % eval_interval == 0:
-                    val_iou, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-
+                    _, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+                    avg_means = sum(entropy_means) / len(entropy_means)
                     status = ""
-                    if val_iou > 0:  #best_iou
-                        best_iou = val_iou
+                    if avg_means < best_ent:  #best_ent
+                        best_ent = avg_means
                         best_state = copy.deepcopy(model.state_dict())
                         torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
                         status = "Improved → Model Saved"
@@ -540,9 +545,9 @@ def train_sam(
                     # Write log entry
                     with open(csv_path, "a", newline="") as f:
                         writer = csv.writer(f)
-                        writer.writerow([epoch, iter + 1, val_iou, best_iou, status])
+                        writer.writerow([epoch, iter + 1, avg_means, best_ent, status])
 
-                    fabric.print(f"Validation IoU={val_iou:.4f} | Best={best_iou:.4f} | {status}")
+                    fabric.print(f"Validation IoU={avg_means:.4f} | Best={best_ent:.4f} | {status}")
 
                     # Stop if model fails to stabilize
                     if no_improve_count >= max_patience:
