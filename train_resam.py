@@ -926,7 +926,7 @@ def train_sam(
                     ):
 
                         embed_feats = get_bbox_feature( embeddings, bbox)
-                        embed_feats = F.normalize(embed_feats, p=2, dim=1)
+                        embed_feats = F.normalize(embed_feats, p=2, dim=0)
                         embedding_queue.append(embed_feats)
 
                         if len(embedding_queue) > 1:
