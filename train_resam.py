@@ -342,6 +342,7 @@ def train_sam(
             step_size = 50
             for j in range(0, len(gt_masks[0]), step_size):
                 
+                
                 gt_masks_new = gt_masks[0][j:j+step_size].unsqueeze(0)
                 prompts = get_prompts(cfg, bboxes, gt_masks_new)
 
@@ -516,7 +517,7 @@ def train_sam(
 
                 if (iter+1) % match_interval==0:
                     fabric.print(
-                        f"Epoch [{epoch}] Iter [{iter + 1}/{len(train_dataloader)}] "
+                        f"Epoch [{epoch}] Iter [{iter + 1}/{len(train_dataloader)}] " f"| Time {batch_time.avg:.2f} "
                         f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
                         f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                     )
