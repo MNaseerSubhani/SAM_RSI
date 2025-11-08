@@ -27,7 +27,7 @@ config = {
     #     "type": "vit_b", 
     #     },
     "opt": {
-        "learning_rate": 1e-4,
+        "learning_rate": 5e-4,
         "weight_decay": 1e-4,
         "decay_factor": 10,
         "steps": [2000, 4000],
