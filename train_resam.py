@@ -408,22 +408,22 @@ def train_sam(
                 loss_sim = torch.tensor(0., device=fabric.device)
 
 
-                # batch_feats = []  # collect all bbox features in current image
+                batch_feats = []  # collect all bbox features in current image
 
-                # for bbox in bboxes:
-                #     feat = get_bbox_feature(embeddings, bbox)
-                #     batch_feats.append(feat)
+                for bbox in bboxes:
+                    feat = get_bbox_feature(embeddings, bbox)
+                    batch_feats.append(feat)
 
-                # if len(batch_feats) > 0:
+                if len(batch_feats) > 0:
                  
-                #     batch_feats = F.normalize(torch.stack(batch_feats, dim=0), dim=1)
-                #     loss_sim = similarity_loss(batch_feats, feature_queue)
+                    batch_feats = F.normalize(torch.stack(batch_feats, dim=0), dim=1)
+                    loss_sim = similarity_loss(batch_feats, feature_queue)
               
-                #     # add new features to queue (detach to avoid backprop)
-                #     for f in batch_feats:
-                #         feature_queue.append(f.detach())
-                # else:
-                #     loss_sim = torch.tensor(0., device=embeddings.device)
+                    # add new features to queue (detach to avoid backprop)
+                    for f in batch_feats:
+                        feature_queue.append(f.detach())
+                else:
+                    loss_sim = torch.tensor(0., device=embeddings.device)
 
         
 
@@ -431,49 +431,49 @@ def train_sam(
                         zip(pred_masks[0], soft_masks[0], iou_predictions[0], bboxes  )
                     ):
 
-                        embed_feats = get_bbox_feature( embeddings, bbox)
+                        # embed_feats = get_bbox_feature( embeddings, bbox)
                         
-                        embed_feats = F.normalize(embed_feats, p=2, dim=0)
+                        # embed_feats = F.normalize(embed_feats, p=2, dim=0)
 
-                        embedding_queue.append(embed_feats)
+                        # embedding_queue.append(embed_feats)
 
                         
 
-                        if len(embedding_queue) > 0:
-                            # Stack all embeddings (num_instances, feature_dim)
-                            features = torch.stack(embedding_queue, dim=0)  # [N, D]
-                            eps = 1e-8
+                        # if len(embedding_queue) > 0:
+                        #     # Stack all embeddings (num_instances, feature_dim)
+                        #     features = torch.stack(embedding_queue, dim=0)  # [N, D]
+                        #     eps = 1e-8
 
-                            # Compute cosine similarity matrix
-                            # cos_sim_matrix = F.cosine_similarity(
-                            #     features.unsqueeze(1),  # [N, 1, D]
-                            #     features.unsqueeze(0),  # [1, N, D]
-                            #     dim=2,
-                            #     eps=eps
-                            # )  # shape [N, N]
+                        #     # Compute cosine similarity matrix
+                        #     # cos_sim_matrix = F.cosine_similarity(
+                        #     #     features.unsqueeze(1),  # [N, 1, D]
+                        #     #     features.unsqueeze(0),  # [1, N, D]
+                        #     #     dim=2,
+                        #     #     eps=eps
+                        #     # )  # shape [N, N]
 
-                            cos_sim_matrix = torch.mm(features, features.t())
+                        #     cos_sim_matrix = torch.mm(features, features.t())
 
-                            # Remove self-similarity bias
-                            num = features.size(0)
-                            mask = (1 - torch.eye(num, device=features.device))
-                            cos_sim_matrix = cos_sim_matrix * mask
+                        #     # Remove self-similarity bias
+                        #     num = features.size(0)
+                        #     mask = (1 - torch.eye(num, device=features.device))
+                        #     cos_sim_matrix = cos_sim_matrix * mask
 
-                            # ---- Soft alignment (SSAL) ----
-                            # Step 1. Rescale cosine to [0,1]
-                            cos_sim_matrix = (cos_sim_matrix + 1) / 2
+                        #     # ---- Soft alignment (SSAL) ----
+                        #     # Step 1. Rescale cosine to [0,1]
+                        #     cos_sim_matrix = (cos_sim_matrix + 1) / 2
 
-                            # Step 2. Compute temperature-scaled soft distribution
-                            tau = 0.07  # you can tune in [0.03–0.1]
-                            sim_soft = torch.exp(cos_sim_matrix / tau)
-                            prob_matrix = sim_soft / (sim_soft.sum(dim=1, keepdim=True) + eps)
+                        #     # Step 2. Compute temperature-scaled soft distribution
+                        #     tau = 0.07  # you can tune in [0.03–0.1]
+                        #     sim_soft = torch.exp(cos_sim_matrix / tau)
+                        #     prob_matrix = sim_soft / (sim_soft.sum(dim=1, keepdim=True) + eps)
 
-                            # Step 3. Soft Semantic Alignment Loss
-                            loss_sim = ((1 - cos_sim_matrix) * prob_matrix).sum(dim=1).mean()
+                        #     # Step 3. Soft Semantic Alignment Loss
+                        #     loss_sim = ((1 - cos_sim_matrix) * prob_matrix).sum(dim=1).mean()
 
-                        else:
-                            loss_sim = torch.tensor(0.0, device=embeddings.device)
-                        # print(loss_sim)
+                        # else:
+                        #     loss_sim = torch.tensor(0.0, device=embeddings.device)
+                        # # print(loss_sim)
 
 
 
