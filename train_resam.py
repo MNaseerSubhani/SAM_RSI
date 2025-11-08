@@ -518,7 +518,7 @@ def train_sam(
 
                 if (iter+1) % match_interval==0:
                     fabric.print(
-                        f"Epoch [{epoch}] Iter [{iter + 1}/{len(train_dataloader)}] " f"| Time {batch_time.avg:.2f} "
+                        f"Epoch [{epoch}] Iter [{iter + 1}/{len(train_dataloader)}] " f"| Time {batch_time.avg:.2f}s "
                         f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
                         f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                     )
