@@ -38,6 +38,21 @@ from collections import deque
 # vis = False
 
 
+class LossWatcher:
+    def __init__(self, window=100, factor=10.0):
+        self.window = window
+        self.factor = factor
+        self.losses = []
+    
+    def is_outlier(self, loss):
+        if not torch.isfinite(loss):
+            return True
+        self.losses.append(loss.item())
+        if len(self.losses) < self.window:
+            return False
+        recent_avg = sum(self.losses[-self.window:]) / self.window
+        return loss.item() > recent_avg * self.factor
+
 def _find_latest_checkpoint(save_dir):
     """
     Look for the most recent .pt/.pth file in save_dir.
@@ -291,6 +306,8 @@ def train_sam(
     val_dataloader: DataLoader,
     init_iou,
 ):
+
+    watcher = LossWatcher(window=50, factor=4)
     # collected = sort_entropy_(model, target_pts)
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
@@ -451,7 +468,8 @@ def train_sam(
              
 
                 loss_total =  20 * loss_focal +  loss_dice  + loss_iou  + 0.1*loss_sim#+ loss_iou  +  +
-
+                if watcher.is_outlier(loss_total):
+                    continue
                 fabric.backward(loss_total)
 
                 optimizer.step()
