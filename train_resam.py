@@ -476,7 +476,7 @@ def train_sam(
                     f"| Focal {focal_losses.avg:.4f} | Dice {dice_losses.avg:.4f} | "
                     f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                 )
-            if (iter+1) % eval_interval == 0:
+            if (iter+1) % 1000 == 0:
                 _, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
                 avg_means = sum(entropy_means) / len(entropy_means)
                 status = ""
