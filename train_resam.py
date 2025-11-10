@@ -384,11 +384,7 @@ def train_sam(
                 overlap_pixels = overlap_map.sum()
                 # Calculate overlap ratio
                 overlap_ratio = overlap_pixels / (total_foreground + 1e-8)  # add epsilon to avoid divide-by-zero
-                print(f"Overlap Ratio: {overlap_ratio.item():.4f}")
-
-
-
-                
+               
 
                 bboxes = []
                 point_list = []
@@ -480,7 +476,7 @@ def train_sam(
                 loss_sim  = loss_sim
              
 
-                loss_total =  20 * loss_focal +  loss_dice  + loss_iou  + 0.1*loss_sim#+ loss_iou  +  +
+                loss_total =  overlap_ratio*2*(20 * loss_focal +  loss_dice  + loss_iou  + 0.1*loss_sim)#+ loss_iou  +  +
                 if watcher.is_outlier(loss_total):
                     continue
                 fabric.backward(loss_total)
