@@ -370,7 +370,8 @@ def train_sam(
 
                 _, preds = process_forward(images_weak, prompts, model)
                 pred_stack = torch.stack(preds, dim=0)
-                mean_thresh = pred_stack[pred_stack > 0.5].mean()
+                # mean_thresh = pred_stack[pred_stack > 0.5].mean()
+                mean_thresh = 0.7
                 pred_binary = (((pred_stack)>mean_thresh) ).float()  
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
