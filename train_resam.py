@@ -311,7 +311,7 @@ def train_sam(
     # collected = sort_entropy_(model, target_pts)
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
-    best_ent = 1000000
+    best_ent = init_iou
     best_state = copy.deepcopy(model.state_dict())
     no_improve_count = 0
     max_patience = cfg.get("patience", 3)  # stop if no improvement for X validations
@@ -496,10 +496,10 @@ def train_sam(
                     f"IoU {iou_losses.avg:.4f} | Sim_loss {sim_losses.avg:.4f} | Total {total_losses.avg:.4f}"
                 )
             if (iter+1) % eval_interval == 0:
-                _, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-                avg_means = sum(entropy_means) / len(entropy_means)
+                avg_means, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+                # avg_means = sum(entropy_means) / len(entropy_means)
                 status = ""
-                if avg_means < 1000:  #best_ent
+                if avg_means > best_ent:  #best_ent
                     best_ent = avg_means
                     best_state = copy.deepcopy(model.state_dict())
                     torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
