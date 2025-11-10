@@ -307,7 +307,7 @@ def train_sam(
     init_iou,
 ):
 
-    watcher = LossWatcher(window=50, factor=4)
+    watcher = LossWatcher(window=50, factor=2)
     # collected = sort_entropy_(model, target_pts)
     focal_loss = FocalLoss()
     dice_loss = DiceLoss()
