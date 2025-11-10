@@ -378,6 +378,18 @@ def train_sam(
                 invert_overlap_map = 1.0 - overlap_map
 
 
+                # Calculate total number of foreground pixels (1s)
+                total_foreground = (pred_binary > 0).float().sum()
+
+                # Calculate total number of overlapping pixels (1s in overlap_map)
+                overlap_pixels = overlap_map.sum()
+
+                # Calculate overlap ratio
+                overlap_ratio = overlap_pixels / (total_foreground + 1e-8)  # add epsilon to avoid divide-by-zero
+
+                print(f"Overlap Ratio: {overlap_ratio.item():.4f}")
+
+
 
                 
 
@@ -430,6 +442,8 @@ def train_sam(
 
 
                 batch_feats = []  # collect all bbox features in current image
+
+
 
                 for bbox in bboxes:
                     feat = get_bbox_feature(embeddings, bbox)
