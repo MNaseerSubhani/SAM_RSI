@@ -500,7 +500,7 @@ def train_sam(
                 avg_means, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
                 # avg_means = sum(entropy_means) / len(entropy_means)
                 status = ""
-                if avg_means > 0:  #best_ent
+                if avg_means > best_ent:  #best_ent
                     best_ent = avg_means
                     best_state = copy.deepcopy(model.state_dict())
                     torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
