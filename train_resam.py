@@ -372,7 +372,8 @@ def train_sam(
                 pred_stack = torch.stack(preds, dim=0)
                 # mean_thresh = pred_stack[pred_stack > 0.5].mean()
                 mean_thresh = 0.7
-                pred_binary = (((pred_stack)>mean_thresh) ).float()  
+                pred_binary = (((pred_stack)>mean_thresh) ).float()
+                pred_binary = pred_binary.detach().cpu()  
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
@@ -470,6 +471,8 @@ def train_sam(
                         loss_iou += F.mse_loss(iou_prediction.view(-1), batch_iou.view(-1), reduction='sum') / num_masks
 
                 del  pred_masks, iou_predictions 
+                del pred_stack, pred_binary, overlap_map, invert_overlap_map
+                torch.cuda.empty_cache()
                 # loss_dist = loss_dist / num_masks
                 loss_dice = loss_dice / num_masks
                 loss_focal = loss_focal / num_masks
