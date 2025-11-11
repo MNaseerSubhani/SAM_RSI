@@ -373,13 +373,13 @@ def train_sam(
                 # mean_thresh = pred_stack[pred_stack > 0.5].mean()
                 mean_thresh = 0.7
                 pred_binary = (((pred_stack)>mean_thresh) ).float()
-                pred_binary = pred_binary.detach().cpu()  
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
                 invert_overlap_map = 1.0 - overlap_map
 
 
                 # Calculate total number of foreground pixels (1s)
+                pred_binary = pred_binary.detach().cpu()  
                 total_foreground = (pred_binary > 0).float().sum()
                 # Calculate total number of overlapping pixels (1s in overlap_map)
                 overlap_pixels = overlap_map.sum()
