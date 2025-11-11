@@ -3,7 +3,7 @@
 cfg_file="configs.config_nwpu"
 prompt="point"
 load_type="soft"
-num_points_list=(1 2 3)
+num_points_list=(1)
 output_dirs=("work_dir/nwpu/pointsam")
 
 for output_dir in "${output_dirs[@]}"; do
