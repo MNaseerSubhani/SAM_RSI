@@ -460,8 +460,8 @@ def train_sam(
                         zip(pred_masks[0], soft_masks[0], iou_predictions[0], bboxes  )
                     ):
                         soft_mask = (soft_mask > 0.).float()
-                        pred_mask = pred_mask * overlap_region
-                        soft_mask = soft_mask * overlap_region
+                        pred_mask = pred_mask * overlap_map
+                        soft_mask = soft_mask * overlap_map
                         
                         # plt.imshow(pred_mask.detach().cpu().numpy(), cmap='viridis')
                         # plt.show()
