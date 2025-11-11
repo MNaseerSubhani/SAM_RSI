@@ -10,7 +10,7 @@ config = {
     "val_batchsize": 1,
     "num_workers": 0,
     "num_epochs": 10,
-    "max_nums": 50,
+    "max_nums": 10,
     "resume": False,
 
     "start_lora_layer": 1,
