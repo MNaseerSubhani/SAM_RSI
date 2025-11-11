@@ -384,7 +384,7 @@ def train_sam(
                 overlap_pixels = overlap_map.sum()
                 # Calculate overlap ratio
                 overlap_ratio = overlap_pixels / (total_foreground + 1e-8)  # add epsilon to avoid divide-by-zero
-               
+                print(overlap_ratio)
 
                 bboxes = []
                 point_list = []
