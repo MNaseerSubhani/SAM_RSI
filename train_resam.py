@@ -483,7 +483,7 @@ def train_sam(
                 loss_sim  = loss_sim
              
 
-                loss_total =  (20 * loss_focal +  loss_dice  + loss_iou  + loss_sim+0.2*overlap_ratio)#+ loss_iou  +  +
+                loss_total =  (20 * loss_focal +  loss_dice  + loss_iou  + loss_sim + 0.2*overlap_ratio)#+ loss_iou  +  +
                 if watcher.is_outlier(loss_total):
                     continue
                 fabric.backward(loss_total)
