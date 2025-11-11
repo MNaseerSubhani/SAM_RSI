@@ -371,7 +371,7 @@ def train_sam(
                 _, preds = process_forward(images_weak, prompts, model)
                 pred_stack = torch.stack(preds, dim=0)
                 # mean_thresh = pred_stack[pred_stack > 0.5].mean()
-                mean_thresh = 0.7
+                mean_thresh = 0.9
                 pred_binary = (((pred_stack)>mean_thresh) ).float()  
                 overlap_count = pred_binary.sum(dim=0)
                 overlap_map = (overlap_count > 1).float()
@@ -379,12 +379,12 @@ def train_sam(
 
 
                 # Calculate total number of foreground pixels (1s)
-                total_foreground = (pred_binary > 0).float().sum()
-                # Calculate total number of overlapping pixels (1s in overlap_map)
-                overlap_pixels = overlap_map.sum()
-                # Calculate overlap ratio
-                overlap_ratio = overlap_pixels / (total_foreground + 1e-8)  # add epsilon to avoid divide-by-zero
-                # print(overlap_ratio)
+                # total_foreground = (pred_binary > 0).float().sum()
+                # # Calculate total number of overlapping pixels (1s in overlap_map)
+                # overlap_pixels = overlap_map.sum()
+                # # Calculate overlap ratio
+                # overlap_ratio = overlap_pixels / (total_foreground + 1e-8)  # add epsilon to avoid divide-by-zero
+                # # print(overlap_ratio)
 
                 bboxes = []
                 point_list = []
@@ -476,7 +476,7 @@ def train_sam(
                 loss_sim  = loss_sim
              
 
-                loss_total =  overlap_ratio*2*(20 * loss_focal +  loss_dice  + loss_iou  + 0.1*loss_sim)#+ loss_iou  +  +
+                loss_total =  0.5*(20 * loss_focal +  loss_dice  + loss_iou  + 0.1*loss_sim)#+ loss_iou  +  +
                 if watcher.is_outlier(loss_total):
                     continue
                 fabric.backward(loss_total)
