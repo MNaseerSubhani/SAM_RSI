@@ -460,6 +460,9 @@ def train_sam(
                         zip(pred_masks[0], soft_masks[0], iou_predictions[0], bboxes  )
                     ):
                         soft_mask = (soft_mask > 0.).float()
+                        pred_mask = pred_mask * overlap_region
+                        soft_mask = soft_mask * overlap_region
+                        
                         # plt.imshow(pred_mask.detach().cpu().numpy(), cmap='viridis')
                         # plt.show()
                         # plt.imshow(soft_mask.detach().cpu().numpy(), cmap='viridis')
@@ -479,7 +482,7 @@ def train_sam(
                 loss_sim  = loss_sim
              
 
-                loss_total =  overlap_ratio*(20 * loss_focal +  loss_dice  + loss_iou  + loss_sim)#+ loss_iou  +  +
+                loss_total =  (20 * loss_focal +  loss_dice  + loss_iou  + loss_sim)#+ loss_iou  +  +
                 if watcher.is_outlier(loss_total):
                     continue
                 fabric.backward(loss_total)
