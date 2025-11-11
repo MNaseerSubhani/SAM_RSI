@@ -379,7 +379,7 @@ def train_sam(
 
 
                 # Calculate total number of foreground pixels (1s)
-                pred_binary = pred_binary.detach().cpu()  
+                # pred_binary = pred_binary.detach().cpu()  
                 total_foreground = (pred_binary > 0).float().sum()
                 # Calculate total number of overlapping pixels (1s in overlap_map)
                 overlap_pixels = overlap_map.sum()
@@ -461,8 +461,8 @@ def train_sam(
                     ):
                         soft_mask = (soft_mask > 0.).float()
                         # print(overlap_map.shape, pred_mask.shape, soft_mask.shape)
-                        pred_mask = pred_mask * invert_overlap_map[0]
-                        soft_mask = soft_mask * invert_overlap_map[0]
+                        # pred_mask = pred_mask * invert_overlap_map[0]
+                        # soft_mask = soft_mask * invert_overlap_map[0]
                         
                         # plt.imshow(pred_mask.detach().cpu().numpy(), cmap='viridis')
                         # plt.show()
@@ -483,7 +483,7 @@ def train_sam(
                 loss_sim  = loss_sim
              
 
-                loss_total =  (20 * loss_focal +  loss_dice  + loss_iou  + loss_sim)#+ loss_iou  +  +
+                loss_total =  (20 * loss_focal +  loss_dice  + loss_iou  + loss_sim+0.2*overlap_ratio)#+ loss_iou  +  +
                 if watcher.is_outlier(loss_total):
                     continue
                 fabric.backward(loss_total)
