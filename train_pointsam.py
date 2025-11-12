@@ -197,7 +197,7 @@ def train_sam(
             # fabric.log_dict(loss_logger, num_iter * (epoch - 1) + iter)
             torch.cuda.empty_cache()
             
-        if epoch % cfg.eval_interval == 0:
+        if epoch % 800 == 0:
             iou, _= validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
             if iou > max_iou:
                 state = {"model": model, "optimizer": optimizer}
