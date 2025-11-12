@@ -109,12 +109,12 @@ def train_sam(
             # fabric.log_dict(loss_logger, num_iter * (epoch - 1) + iter)
             torch.cuda.empty_cache()
 
-        if epoch % 800 == 0:
-            iou, f1_score = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
-            if iou > max_iou:
-                state = {"model": model, "optimizer": optimizer}
-                fabric.save(os.path.join(cfg.out_dir, "save", "last-ckpt.pth"), state)
-                max_iou = iou
+            if iter % 800 == 0:
+                iou, f1_score = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
+                if iou > max_iou:
+                    state = {"model": model, "optimizer": optimizer}
+                    fabric.save(os.path.join(cfg.out_dir, "save", "last-ckpt.pth"), state)
+                    max_iou = iou
 
 def configure_opt(cfg: Box, model: Model):
 
