@@ -352,7 +352,7 @@ def train_sam(
         num_iter = len(train_dataloader)
         entropy_means.clear()
 
-`   1`        
+
 
         for iter, data in enumerate(train_dataloader):
             
