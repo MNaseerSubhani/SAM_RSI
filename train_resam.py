@@ -336,7 +336,7 @@ def train_sam(
 
     entropy_means = deque(maxlen=len(train_dataloader))
 
-    overlap_ratios = []
+    # overlap_ratios = []
 
     eps = 1e-8
     for epoch in range(1, cfg.num_epochs + 1):
@@ -380,15 +380,15 @@ def train_sam(
                 invert_overlap_map = 1.0 - overlap_map
 
 
-                # inside your loop:
-                total_foreground = (pred_binary > 0).float().sum()
-                overlap_pixels = overlap_map.sum()
-                overlap_ratio = overlap_pixels / (total_foreground + 1e-8)
-                overlap_ratios.append(overlap_ratio.item())  # store scalar value
+                # # inside your loop:
+                # total_foreground = (pred_binary > 0).float().sum()
+                # overlap_pixels = overlap_map.sum()
+                # overlap_ratio = overlap_pixels / (total_foreground + 1e-8)
+                # overlap_ratios.append(overlap_ratio.item())  # store scalar value
 
-                # after loop ends:
-                mean_overlap = sum(overlap_ratios) / len(overlap_ratios)
-                print(f"Mean overlap ratio: {mean_overlap:.4f}")
+                # # after loop ends:
+                # mean_overlap = sum(overlap_ratios) / len(overlap_ratios)
+                # print(f"Mean overlap ratio: {mean_overlap:.4f}")
 
 
                 bboxes = []
@@ -487,7 +487,7 @@ def train_sam(
                 loss_sim  = loss_sim
              
 
-                loss_total =  (20 * loss_focal +  loss_dice  + loss_iou  + 0.1*loss_sim )#+ loss_iou  +  +
+                loss_total =  (20 * loss_focal +  loss_dice  + loss_iou   )#+ 0.1*loss_sim   
                 if watcher.is_outlier(loss_total):
                     continue
                 fabric.backward(loss_total)
