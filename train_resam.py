@@ -487,7 +487,7 @@ def train_sam(
                 loss_sim  = loss_sim
              
 
-                loss_total =  (20 * loss_focal +  loss_dice  + loss_iou   )#+ 0.1*loss_sim   
+                loss_total =  (20 * loss_focal +  loss_dice  + loss_iou + 0.1*loss_sim     )#+ 
                 if watcher.is_outlier(loss_total):
                     continue
                 fabric.backward(loss_total)
@@ -518,7 +518,7 @@ def train_sam(
                 avg_means, _ = validate(fabric, cfg, model, val_dataloader, cfg.name, epoch)
                 # avg_means = sum(entropy_means) / len(entropy_means)
                 status = ""
-                if avg_means > best_ent:  #best_ent
+                if avg_means > 0:  #best_ent
                     best_ent = avg_means
                     best_state = copy.deepcopy(model.state_dict())
                     torch.save(best_state, os.path.join(cfg.out_dir, "save", "best_model.pth"))
@@ -618,12 +618,12 @@ def main(cfg: Box) -> int:
         loaded = True
         fabric.print(f"Resumed from explicit checkpoint: {cfg.model.ckpt}")
    
-    init_iou = 0
+    # init_iou = 0
     # print('-'*100)
     # print('\033[92mDirect test on the original SAM.\033[0m') 
     # init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
     # print('-'*100)
-    # del _     
+    del _     
 
 
 
