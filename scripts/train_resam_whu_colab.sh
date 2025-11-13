@@ -3,7 +3,7 @@
 cfg_file="configs.config_whu"
 prompt="point"
 load_type="soft"
-num_points_list=(3)
+num_points_list=(1)
 output_dirs=("work_dir/whu/resam")
 
 for output_dir in "${output_dirs[@]}"; do
