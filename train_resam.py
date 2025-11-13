@@ -618,7 +618,7 @@ def main(cfg: Box) -> int:
         loaded = True
         fabric.print(f"Resumed from explicit checkpoint: {cfg.model.ckpt}")
    
-    # init_iou = 0
+    init_iou = 0
     # print('-'*100)
     # print('\033[92mDirect test on the original SAM.\033[0m') 
     # init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
