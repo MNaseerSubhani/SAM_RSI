@@ -623,7 +623,7 @@ def main(cfg: Box) -> int:
     # print('\033[92mDirect test on the original SAM.\033[0m') 
     # init_iou, _, = validate(fabric, cfg, model, val_data, name=cfg.name, epoch=0)
     # print('-'*100)
-    del _     
+    # del _     
 
 
 
